@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parna proga</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Rye&display=swap" rel="stylesheet">
+  <style>
+    html, body { margin: 0; height: 100%; background: #1d1611; overflow: hidden; }
+    body { display: flex; align-items: center; justify-content: center; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <script src="js/config.js"></script>
+  <script src="js/track.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/fx.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/station.js"></script>
+  <script>if (location.hash.startsWith('#auto')) document.write('<script src="js/autotest.js"><\/script>');</script>
+  <script src="js/main.js"></script>
+</body>
+</html>
