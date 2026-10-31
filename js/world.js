@@ -55,6 +55,7 @@ function decorate(track) {
   // zmaj z vitezom in samorog
   { const i = track.freeAt(Math.round(lerp(track.stops[2], track.stops[3], 0.46)), 15) ? Math.round(lerp(track.stops[2], track.stops[3], 0.46)) : Math.round(lerp(track.stops[2], track.stops[3], 0.88));
     chunks[Math.floor(i / CH)].push({ k: 'dragon', ...xz(ptAt(i, -19)), sc: 1, ph: 0 }, { k: 'knight', ...xz(ptAt(i + 4, -8)), sc: 1, ph: 0 });
+    track.dragonPos = i * SEG;
     blocked.push({ x: ptAt(i, -20)[0], z: ptAt(i, -20)[1], r: 22 }); }
   { const i = Math.round(lerp(track.stops[1], track.stops[2], 0.3));
     chunks[Math.floor(i / CH)].push({ k: 'unicorn', ...xz(ptAt(i, 24)), sc: 1, ph: 0 });
@@ -69,12 +70,14 @@ function decorate(track) {
     streams.push({ pts: sp, w: 6, i });
   }
 
+  if (track.jumpPos) { const ji = Math.round(track.jumpPos / SEG);
+    for (let k = ji - Math.round(JUMP_RAMP / SEG); k <= ji + Math.round((JUMP_GAP + JUMP_RAMP) / SEG); k += 3) for (let o = -120; o <= 120; o += 12) blocked.push({ x: ptAt(k, o)[0], z: ptAt(k, o)[1], r: 10 }); }
   const isBlocked = (i, off) => { const [x, z] = ptAt(i, off); return blocked.some(b => Math.hypot(b.x - x, b.z - z) < b.r) || (rivers.length && Math.abs(off - 36) < 14 && segs[i].leg === 3); };
   for (let i = 2; i < segs.length - 2; i++) {
     const s = segs[i];
     if (s.tunnel) continue;
     const ns = nearStop(i);
-    if (i % 17 === 0 && !s.bridge) add(i, 'pole', -6);
+    if (i % 17 === 0 && !s.bridge && !(track.jumpPos && Math.abs(i * SEG - track.jumpPos - JUMP_GAP / 2) < JUMP_GAP / 2 + JUMP_RAMP + 6)) add(i, 'pole', -6);
     for (const side of [-1, 1]) {
       const off = side * (9 + r() * r() * 70);
       if (isBlocked(i, off)) continue;
@@ -350,6 +353,7 @@ const World = (() => {
       inkPoly(g, [...P(-3, -2.6), ...P(3, -2.6), ...P(3, 2.6), ...P(-3, 2.6)], '#8f877b', 2, 0.4, rd.i);
       for (const n of [-0.85, 0.85]) inkLine(g, [...P(-3, n), ...P(3, n)], 3, INK, 0.2);
     }
+    Events.ground(g, G, sx, sy);
     if (G.crash && G.crash.kind === 'bridge') {
       const st = tr.streams.find(s => s.i === G.crash.bridgeI);
       if (st) ribbon(st.pts.slice(9, 19), st.w + 2.5);
@@ -410,9 +414,11 @@ const World = (() => {
         list.push({ y: sy(p.z), x: sx(p.x), o: { k, sc: 1, ph: 0 } });
       }
     }
+    Events.items(G, sx, sy, list);
     list.sort((a, b) => a.y - b.y);
     for (const it of list) {
-      if (it.wreck) {
+      if (it.draw) it.draw(g);
+      else if (it.wreck) {
         const c = it.wreck;
         g.save(); g.globalAlpha = 1 - c.sink * 0.85;
         drawCar(g, c.type, it.x, it.y - c.h * PX * ZK + c.sink * 18, it.ang, PX, { dist: dist + G.crash.t * 30, mood: 'dizzy', coal: t.coal, water: t.water, slots: c.wagon ? c.wagon.slots : null });
@@ -436,7 +442,7 @@ const World = (() => {
         if (it.ch.state === 'flee' && it.k % 2 === 0 && it.ch.t < 2) bubble(g, it.x, it.y - 44, 'Beee!', 15);
       } else {
         const o = it.o;
-        if (o.k === 'dragon') { drawDragon(g, it.x, it.y, G.time + o.ph, 1); continue; }
+        if (o.k === 'dragon') { if (!G.dragon || G.dragon.state === 'idle') drawDragon(g, it.x, it.y, G.time + o.ph, 1); continue; }
         if (o.k === 'knight') { drawKnight(g, it.x, it.y, G.time + o.ph, -1); continue; }
         if (o.k === 'unicorn') { drawUnicorn(g, it.x, it.y, G.time + o.ph); continue; }
         const img = o.k.startsWith('sign') ? signSprite(+o.k.slice(4)) : spr(o.k);
@@ -704,6 +710,14 @@ const HUD = (() => {
       card(g, cx - 200, 142, 400, 42, '#f3c2b2', 110, 10);
       const lx = legend(g, cx - 175, 163, [], `Ovce na progi čez ${Math.round(sheep.pos - t.pos)} m!  Zatrobi`, 17);
       btnGlyph(g, lx + 18, 163, 'B', 11);
+      return;
+    }
+    const ea = Events.alert(G);
+    if (ea) {
+      g.font = `bold 17px ${FONT}`;
+      const w = g.measureText(ea.text).width + 50;
+      card(g, cx - w / 2, 142, w, 42, ea.col, 113, 10);
+      plainText(g, ea.text, cx, 163, 17, INK, 'center');
       return;
     }
     const kids = (G.kids || []).find(c => !c.happy && c.pos - t.pos < 220 && c.pos - t.pos > -40);

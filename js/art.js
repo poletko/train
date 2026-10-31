@@ -164,7 +164,8 @@ function drawToon(g, x, y, o) {
   const shY = -22;
   for (const s of [-1, 1]) {
     let hx, hy, cx, cy;
-    if (o.carry) { hx = s * 9; hy = -58; cx = s * 20; cy = -36; }
+    if (o.hand) { hx = o.hand[0] + s * 3; hy = o.hand[1] - hipY; cx = (s * 9 + hx) / 2 + s * 5; cy = (shY + hy) / 2 + 7; }
+    else if (o.carry) { hx = s * 9; hy = -58; cx = s * 20; cy = -36; }
     else if (o.wave && s === f) { hx = s * 22; hy = -48 + Math.sin(BEAT * Math.PI * 4) * 5; cx = s * 24; cy = -28; }
     else {
       const sw = -Math.sin(ph + (s > 0 ? 0 : Math.PI)) * 10 * mv + Math.sin(BEAT * Math.PI + s) * 2;

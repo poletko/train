@@ -14,7 +14,7 @@ function buildTrack() {
   for (let i = 0; i < Math.round(PRE / SEG); i++) segs.push(newSeg(0, 40, false, 0));
   stops.push(segs.length);
 
-  let elev = 0, heading = 0;
+  let elev = 0, heading = 0, jumpI = 0;
   for (let L = 0; L < LEGS.length; L++) {
     const lg = LEGS[L];
     const rnd = mulberry32(lg.seed);
@@ -53,6 +53,12 @@ function buildTrack() {
       }
       d += clen;
     }
+    // skakalnica: raven zalet brez krivin
+    if (L === 1) {
+      const j = start + Math.round(lg.len * 0.62 / SEG);
+      jumpI = j;
+      for (let k = j - Math.round(500 / SEG); k < j + Math.round((JUMP_GAP + 90) / SEG); k++) { segs[k].curve = 0; segs[k].R = 0; segs[k].limit = lg.line; segs[k].jump = true; }
+    }
     elev = e1;
     stops.push(segs.length);
   }
@@ -66,7 +72,7 @@ function buildTrack() {
     for (let k = i - 8; k <= i + 5; k++) segs[k].limit = Math.min(segs[k].limit, BRIDGE_LIMIT);
   };
   // prost kos proge (brez predora, mostu, perona) v okolici ±r segmentov
-  const freeAt = (i, r) => { for (let k = i - r; k <= i + r; k++) { const q = segs[k]; if (!q || q.tunnel || q.bridge || q.crossing) return false; } return !stops.some(st => Math.abs(st - i) < 90); };
+  const freeAt = (i, r) => { for (let k = i - r; k <= i + r; k++) { const q = segs[k]; if (!q || q.tunnel || q.bridge || q.crossing || q.jump) return false; } return !stops.some(st => Math.abs(st - i) < 90); };
   const place = (L, fracs, r, fn, max = 9) => {
     let n = 0;
     for (const f of fracs) { if (n >= max) break; const i = Math.round(lerp(stops[L], stops[L + 1], f)); if (freeAt(i, r)) { fn(i); n++; } }
@@ -77,6 +83,10 @@ function buildTrack() {
   // cestni prehodi (dva na odsek)
   const crossings = [];
   for (let L = 0; L < LEGS.length; L++) place(L, [0.24, 0.5, 0.36, 0.66, 0.8], 22, i => { crossings.push(i); for (let k = i - 2; k <= i + 2; k++) segs[k].crossing = true; }, 2);
+
+  // hlod čez progo na prvem odseku
+  let logI = 0;
+  place(0, [0.2, 0.17, 0.24, 0.8], 30, i => { logI = i; }, 1);
 
   // uvoz v postaje: 40 km/h
   for (const st of stops) {
@@ -122,11 +132,12 @@ function buildTrack() {
       sched += SEG / Math.max(4, vmax);
     }
     for (let k = 0; k <= 80; k++) profile.push(segs[Math.round(a + (b - a) * k / 80)].y);
-    sched = Math.ceil((sched + 75) / 15) * 15;
+    sched = Math.ceil((sched + 75 + (EVENT_TIME[L] || 0)) / 15) * 15;
     legInfo.push({ from: L, to: L + 1, len: (b - a) * SEG, climb, desc, sched, rain: LEGS[L].rain, tunnel: LEGS[L].tunnels.length > 0, profile });
   }
 
-  const track = { segs, stops, legs: legInfo, signs, bridges, crossings, freeAt, len: segs.length * SEG };
+  const track = { segs, stops, legs: legInfo, signs, bridges, crossings, freeAt, len: segs.length * SEG,
+    logPos: logI * SEG, jumpPos: jumpI * SEG };
   if (typeof decorate === 'function') decorate(track);
   return track;
 }

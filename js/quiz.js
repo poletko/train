@@ -78,7 +78,7 @@ const Quiz = (() => {
       q.solvedT -= dt;
       if (q.solvedT <= 0) {
         if (q.revealed && q.purpose !== 'mini') { next(q); q.msg = 'Nov račun:'; q.msgCol = INK; }
-        else if (q.purpose === 'buy' && q.done < q.max) { next(q); q.msg = ''; }
+        else if (q.purpose !== 'penalty' && q.purpose !== 'mini' && q.done < q.max) { next(q); q.msg = ''; }
         else return true;
       }
       return false;
@@ -109,6 +109,8 @@ const Quiz = (() => {
       Snd.good();
       if (q.purpose === 'buy') { G.addPoints(5); G.train.coal = Math.min(TRAIN.coalCap, G.train.coal + 500); q.msg = `Pravilno! +1 voz premoga (${q.done}/${q.max})`; }
       else if (q.purpose === 'mini') { G.addPoints(10); q.msg = 'Pravilno! +10'; }
+      else if (q.purpose === 'lab') { G.addPoints(5); q.msg = `Pravilno! Načrt je ${q.done < q.max ? 'skoraj ' : ''}narisan (${q.done}/${q.max})`; }
+      else if (q.purpose === 'jump') { G.addPoints(5); q.msg = `Pravilno! (${q.done}/${q.max})`; }
       else { G.addPoints(5); q.msg = 'Pravilno! Zasilna rezerva je tvoja.'; }
       q.msgCol = '#2d6a2d'; q.solvedT = 1.4;
     } else {
@@ -131,23 +133,18 @@ const Quiz = (() => {
     g.fillStyle = 'rgba(29,22,17,0.55)'; g.fillRect(0, 0, W, H);
     const x = W / 2 - 360, y = 110, w = 720, h = 470;
     card(g, x, y, w, h, PAL.cream, 401, 22);
-    const titles = { buy: 'SKLADIŠČE PREMOGA', penalty: { coal: 'ZMANJKALO JE PREMOGA!', water: 'ZMANJKALO JE VODE!', sand: 'ZMANJKALO JE PESKA!' }[q.what] };
+    const titles = { buy: 'SKLADIŠČE PREMOGA', jump: 'PONOVNI SKOK', penalty: { coal: 'ZMANJKALO JE PREMOGA!', water: 'ZMANJKALO JE VODE!', sand: 'ZMANJKALO JE PESKA!' }[q.what] };
     toonText(g, titles[q.purpose] || titles.buy, W / 2, y + 42, 34, q.purpose === 'buy' ? PAL.mustard : PAL.red, 'center', FONT_T, 6);
-    plainText(g, q.purpose === 'buy' ? `Premog plačaš z računi: vsak pravilen = 1 voz (500 kg). Največ ${q.max}.` : 'Kazen: reši račun, da dobiš zasilno rezervo in lahko pelješ naprej.', W / 2, y + 82, 16, INK, 'center', FONT, 'normal');
+    const sub = q.purpose === 'buy' ? `Premog plačaš z računi: vsak pravilen = 1 voz (500 kg). Največ ${q.max}.`
+      : q.purpose === 'jump' ? `Reši ${q.max} račune in žerjav potegne vlak iz kanjona za nov zalet (${q.done}/${q.max}).`
+      : 'Kazen: reši račun, da dobiš zasilno rezervo in lahko pelješ naprej.';
+    plainText(g, sub, W / 2, y + 82, 16, INK, 'center', FONT, 'normal');
     // vprašanje
     g.font = `bold 30px ${FONT}`;
     const lines = wrap(g, q.text, w - 80);
     lines.forEach((l, i) => plainText(g, l, W / 2, y + 140 + i * 38 - (lines.length - 1) * 12, 30, INK, 'center'));
-    // kolesca
-    const bw = 62, gap = 12, total = q.nd * bw + (q.nd - 1) * gap;
-    const sx = W / 2 - total / 2 + (q.shake > 0 ? Math.sin(q.shake * 60) * 8 : 0), by = y + 250;
-    for (let i = 0; i < q.nd; i++) {
-      const bx = sx + i * (bw + gap), sel = i === q.cursor && q.solvedT <= 0;
-      inkPoly(g, [bx, by, bx + bw, by, bx + bw, by + 80, bx, by + 80], sel ? '#fff3c4' : PAL.white, sel ? 4 : 3, 0.6, 410 + i);
-      plainText(g, String(q.digits[i]), bx + bw / 2, by + 42, 48, INK, 'center');
-      if (sel) { inkPoly(g, [bx + bw / 2 - 12, by - 8, bx + bw / 2 + 12, by - 8, bx + bw / 2, by - 24], PAL.yellow, 2.5, 0.4, 420); inkPoly(g, [bx + bw / 2 - 12, by + 88, bx + bw / 2 + 12, by + 88, bx + bw / 2, by + 104], PAL.yellow, 2.5, 0.4, 421); }
-    }
-    if (q.unit) plainText(g, q.unit, sx + total + 18, by + 42, 28, INK, 'left');
+    const by = y + 250;
+    wheels(g, q, W / 2, by);
     if (q.msg) plainText(g, q.msg, W / 2, by + 132, 20, q.msgCol, 'center');
     // gumbi
     const ly = y + h - 34;
@@ -155,6 +152,18 @@ const Quiz = (() => {
     lx = legend(g, lx, ly, ['L↕'], 'številka'); lx = legend(g, lx + 26, ly, ['L↔'], 'premik'); lx = legend(g, lx + 26, ly, ['A'], 'potrdi');
     if (q.purpose === 'buy') legend(g, lx + 26, ly, ['B'], 'dovolj, odpelji');
     plainText(g, 'tipkovnica: vtipkaj številke in Enter', W / 2, y + h + 22, 13, PAL.cream, 'center', FONT, 'normal');
+  }
+  // kolesca števk (sredina cx, vrh by)
+  function wheels(g, q, cx, by) {
+    const bw = 62, gap = 12, total = q.nd * bw + (q.nd - 1) * gap;
+    const sx = cx - total / 2 + (q.shake > 0 ? Math.sin(q.shake * 60) * 8 : 0);
+    for (let i = 0; i < q.nd; i++) {
+      const bx = sx + i * (bw + gap), sel = i === q.cursor && q.solvedT <= 0;
+      inkPoly(g, [bx, by, bx + bw, by, bx + bw, by + 80, bx, by + 80], sel ? '#fff3c4' : PAL.white, sel ? 4 : 3, 0.6, 410 + i);
+      plainText(g, String(q.digits[i]), bx + bw / 2, by + 42, 48, INK, 'center');
+      if (sel) { inkPoly(g, [bx + bw / 2 - 12, by - 8, bx + bw / 2 + 12, by - 8, bx + bw / 2, by - 24], PAL.yellow, 2.5, 0.4, 420); inkPoly(g, [bx + bw / 2 - 12, by + 88, bx + bw / 2 + 12, by + 88, bx + bw / 2, by + 104], PAL.yellow, 2.5, 0.4, 421); }
+    }
+    if (q.unit) plainText(g, q.unit, sx + total + 18, by + 42, 28, INK, 'left');
   }
   function drawMini(g, G) {
     const q = G.mini, x = W - 488, y = 300, w = 476, h = 238;
@@ -182,5 +191,5 @@ const Quiz = (() => {
     lx = legend(g, lx + 10, y + h - 18, ['A'], 'potrdi', 12);
     plainText(g, 'medtem ni lopate!', x + w - 18, y + h - 18, 12, PAL.red2, 'right');
   }
-  return { open, openMini, update, updateMini, draw, drawMini, typeDigit };
+  return { open, openMini, update, updateMini, draw, drawMini, typeDigit, wheels, wrap };
 })();

@@ -32,8 +32,9 @@ function newGame() {
   }
   G = {
     mode: 'title', track, train, sched, clock: START_TIME, leg: 0, st: null,
+    log: { pos: track.logPos, state: 'idle' }, jump: { pos: track.jumpPos, state: 'idle', tries: 0 }, dragon: { pos: track.dragonPos, state: 'idle' }, ev: null,
     challenges: makeChallenges(track), kids: makeKids(track), depot: null, depotCool: 0, quiz: null, mini: null, miniT: 60, crash: null, pic: null,
-    score: { points: 0, delivered: 0, missed: 0, left: 0, violations: 0, penalties: 0, late: 0, onTime: 0, sheep: 0, kids: 0, mini: 0 },
+    score: { points: 0, delivered: 0, missed: 0, left: 0, violations: 0, penalties: 0, late: 0, onTime: 0, sheep: 0, kids: 0, mini: 0, saw: 0, jump: '', dragon: false },
     msgs: [], violated: new Set(), ready: [false, false], reason: '', time: 0, paused: false, trans: null,
     msg(text, color = PAL.cream, dur = 3) { this.msgs.unshift({ text, color, t: dur, dur }); if (this.msgs.length > 3) this.msgs.pop(); },
     addPoints(p) { this.score.points += p; },
@@ -57,7 +58,8 @@ function newGame() {
 function makeChallenges(track) {
   const out = [];
   for (const L of [0, 1, 4]) {
-    let i = Math.round(lerp(track.stops[L], track.stops[L + 1], 0.35 + Math.random() * 0.3)), n = 0;
+    // na odseku s skakalnico ovce stojijo dovolj zgodaj, da je še prostor za zalet
+    let i = Math.round(lerp(track.stops[L], track.stops[L + 1], L === 1 ? 0.12 + Math.random() * 0.2 : 0.35 + Math.random() * 0.3)), n = 0;
     while (!track.freeAt(i, 30) && n++ < 40) i += 7;
     const flock = [];
     for (let k = 0; k < 5; k++) flock.push({ off: -2.6 + k * 1.3 + (Math.random() - 0.5) * 0.6, dz: (Math.random() - 0.5) * 8, ph: Math.random() * 6, dir: k < 2 || (k === 2 && Math.random() < 0.5) ? -1 : 1, hop: 0 });
@@ -189,11 +191,12 @@ function updateDrive(dt) {
     const d = c.pos - t.pos;
     if (t.whistle && d < 120 && d > -60) { c.happy = 0.01; G.score.kids++; G.addPoints(KID_BONUS); G.msg(`Otroci so veseli! +${KID_BONUS}`, '#d9ecc4'); }
   }
+  if (Events.drive(G)) return;
   // skladišče premoga, ko ga zmanjkuje
   const stopZ = G.track.stops[G.leg + 1] * SEG;
   if (!G.depot && t.coal < COAL_LOW && t.pos > G.depotCool) {
     let p = t.pos + 450;
-    while (segAt(G.track, p).tunnel || segAt(G.track, p).bridge || segAt(G.track, p + 30).bridge) p += 30;
+    while (segAt(G.track, p).tunnel || segAt(G.track, p).bridge || segAt(G.track, p + 30).bridge || segAt(G.track, p).jump) p += 30;
     if (stopZ - p > 400) { G.depot = { pos: p, used: false }; G.msg('Premoga zmanjkuje! Ob progi je skladišče – ustavi pri H.', PAL.yellow, 5); }
   }
   if (G.depot) {
@@ -285,8 +288,9 @@ function drawStats(g, y) {
     `Dostavljeno: ${s.delivered}   ·   pozabljeno: ${s.missed + s.left}`,
     `Točni prihodi: ${s.onTime}   ·   zamuda skupaj: ${fmtDelta(s.late).slice(1)}`,
     `Prehitro: ${s.violations}×   ·   ovce: ${s.sheep}   ·   veseli otroci: ${s.kids}   ·   kazni: ${s.penalties}`,
+    `Hlod: ${s.saw ? s.saw.toFixed(1) + ' s' : '–'}   ·   skok: ${s.jump || (G.jump.tries ? 'v kanjonu' : '–')}${G.jump.tries ? ` (padci: ${G.jump.tries})` : ''}   ·   zmaj: ${s.dragon ? 'premagan' : '–'}`,
   ];
-  lines.forEach((l, i) => plainText(g, l, W / 2, y + i * 34, 22, INK, 'center'));
+  lines.forEach((l, i) => plainText(g, l, W / 2, y + i * 32, 21, INK, 'center'));
 }
 function drawOver(g) {
   sunburst(g, '#e2a28a', '#cf8a72');
@@ -321,7 +325,7 @@ function tick(dt) {
   if (window.AUTO) window.AUTO.control(G, dt);
   G.time += dt;
   if (Ctl.p[0].a || Ctl.p[1].a) Snd.init();
-  if ((Ctl.pressed(0, 'start') || Ctl.pressed(1, 'start')) && (G.mode === 'drive' || G.mode === 'station')) G.paused = !G.paused;
+  if ((Ctl.pressed(0, 'start') || Ctl.pressed(1, 'start')) && (G.mode === 'drive' || G.mode === 'station' || Events.modes.includes(G.mode))) G.paused = !G.paused;
   if (G.paused) return;
   if (G.trans) {
     G.trans.t += dt;
@@ -331,7 +335,7 @@ function tick(dt) {
   const busy = G.trans && !G.trans.done;
   if (G.quiz) {
     Quiz.update(G, dt);
-    if (G.quiz && G.quiz.purpose === 'buy') G.clock += dt;   // nakup v skladišču vzame čas, kazen ne
+    if (G.quiz && (G.quiz.purpose === 'buy' || G.quiz.purpose === 'lab')) G.clock += dt;   // nakup in laboratorij vzameta čas, kazen ne
     Snd.setWhistle(false); Snd.setSqueal(0); Snd.setSlip(0);
   } else if (G.mode === 'crash') {
     if (G.crash.t > 3.6) gameOver(G.crashReason, G.crash.kind);
@@ -341,6 +345,11 @@ function tick(dt) {
   } else if (G.mode === 'drive') {
     G.clock += dt;
     if (!busy) updateDrive(dt);
+  } else if (Events.modes.includes(G.mode)) {
+    G.clock += dt;
+    Snd.setHiss(0); Snd.setSlip(0); Snd.setSqueal(0); Snd.setRain(0);
+    Snd.setWhistle(whistleTimer > 0); whistleTimer = Math.max(0, whistleTimer - dt);
+    if (!busy) Events.update(G, dt);
   } else if (G.mode === 'station') {
     G.clock += dt;
     Snd.setHiss(0); Snd.setSlip(0); Snd.setSqueal(0); Snd.setWhistle(false); Snd.setRain(0);
@@ -365,6 +374,10 @@ function draw() {
     HUD.drawTop(ctx, G); HUD.drawP1(ctx, G); HUD.drawP2(ctx, G); HUD.messages(ctx, G, 210);
     if (G.mini && !G.quiz) Quiz.drawMini(ctx, G);
     if (G.quiz) Quiz.draw(ctx, G);
+  } else if (Events.modes.includes(G.mode)) {
+    Events.draw(ctx, G);
+    if (G.quiz) { if (G.quiz.purpose === 'lab') Events.drawLab(ctx, G); else Quiz.draw(ctx, G); }
+    HUD.messages(ctx, G, G.quiz ? 60 : 160);
   } else if (G.mode === 'crash') World.draw(ctx, G); else if (G.mode === 'station') { Station.draw(ctx, G); HUD.messages(ctx, G, 90); }
   else if (G.mode === 'over') drawOver(ctx);
   else if (G.mode === 'end') drawEnd(ctx);
@@ -381,15 +394,16 @@ function draw() {
 let last = performance.now();
 let lastError = null;
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = window.AUTO ? 1 / 60 : Math.min(0.05, (now - last) / 1000);
   last = now;
+  // avtopilot teče s časovnikom (brezglavi Chrome sličice redko izriše)
   requestAnimationFrame(frame);
   // napaka ne sme ustaviti igre: zapiši jo na zaslon in nadaljuj
   try {
-    const n = window.AUTO ? window.AUTO.speed : 1;
+    const n = window.AUTO ? (window.AUTO.stopAt && G.time >= window.AUTO.stopAt ? 0 : window.AUTO.speed) : 1;
     for (let i = 0; i < n; i++) tick(dt);
     const t = G.train;
-    Snd.music(G.mode === 'drive' ? clamp(Math.abs(t.v) / 18, 0.15, 1) : G.mode === 'station' ? 0.5 : 0.7);
+    Snd.music(G.mode === 'drive' ? clamp(Math.abs(t.v) / 18, 0.15, 1) : G.mode === 'station' ? 0.5 : Events.modes.includes(G.mode) ? 1 : 0.7);
     draw();
   } catch (e) {
     console.error(e);
@@ -422,6 +436,23 @@ function start() {
       G.leg = Math.max(0, G.track.stops.findIndex(s => s * SEG > t.pos) - 1);
     } else { G.mode = 'station'; Station.enter(G, 0); }
   }
+  // vmesne igre: #ev-saw, #ev-jump (#ev-jump-slow), #ev-dragon (#ev-dragon-lab)
+  const ev = location.hash.match(/[#-]ev-(saw|jump|dragon)/);
+  if (ev) {
+    const t = G.train; t.coal = 3000; t.water = 15; t.sand = 200;
+    t.wagons[0].slots[0] = { kind: 'P', dest: 2 }; t.wagons[3].slots[0] = { kind: 'F', dest: 3 };
+    const k = ev[1];
+    G.leg = k === 'saw' ? 0 : k === 'jump' ? 1 : 2;
+    G.clock = G.sched.dep[G.leg] + 60;
+    if (k === 'saw') { t.pos = G.log.pos - 30; G.log.state = 'saw'; }
+    if (k === 'jump') { t.pos = G.jump.pos - JUMP_RAMP; t.v = (location.hash.includes('slow') ? JUMP_KMH - 15 : JUMP_KMH + 8) / 3.6; G.jump.state = 'fly'; G.jump.v = t.v; }
+    if (k === 'dragon') { t.pos = G.dragon.pos; t.v = 12; G.dragon.state = 'fight'; }
+    Events.start(G, k);
+    if (location.hash.includes('lab')) { G.ev.coalHits = 3; }
+  }
+  // razvojno previjanje: ff<s> odigra prvih s sekund takoj (za posnetke)
+  const ff = location.hash.match(/ff([\d.]+)/);
+  if (ff) for (let i = 0; i < +ff[1] * 60; i++) tick(1 / 60);
   requestAnimationFrame(frame);
 }
 // počakaj na pisavi (če sta dosegljivi), sicer začni z nadomestnima
