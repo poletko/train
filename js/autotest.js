@@ -58,7 +58,27 @@ window.AUTO = {
     const tap = (i, p, b) => { this.tA[i] = !this.tA[i]; p[b] = this.tA[i]; };
     const walk = (p, a, x) => { const d = x - a.x; p.lx = Math.abs(d) < 12 ? 0 : Math.sign(d); return Math.abs(d) < 14; };
     if (e.kind === 'saw') { p1.lx = e.need; p2.lx = e.need; return; }
-    if (e.kind !== 'dragon' || e.won) return;
+    if (e.kind === 'fire' || e.kind === 'blaze') {
+      // črpaj, ko tlak pade; meri v najbližjo ognjeno kroglo, goreč vagon ali plamen
+      p1.ly = e.press < 0.9 ? (this.toggle ? 1 : -1) : 0;
+      if (this.toggle && e.press < 0.9) { this.pumpPh = !this.pumpPh; p1.ly = this.pumpPh ? 1 : -1; }
+      const nx = e.hoseX, ny = e.roofY - 52;
+      let tgt = null;
+      if (e.balls) for (const b of e.balls) if (!tgt || b.y < tgt.y) tgt = { x: b.x + b.vx * 0.5, y: b.y + b.vy * 0.5 };
+      if (!tgt && e.cars) { const c = e.cars.find(c => c.burn > 0); if (c) tgt = { x: c.x, y: e.roofY - 30 }; }
+      if (!tgt && e.spots) { const f = e.spots.find(f => f.burn > 0); if (f) tgt = { x: f.x, y: f.y - 14 }; }
+      if (!tgt) { p2.a = false; return; }
+      const sp = 480 + 460 * e.press;
+      let best = 1e9, bestA = e.aim;
+      for (let a = -1.2; a <= 2.8; a += 0.03) {
+        let x = nx, y = ny, vx = Math.cos(a) * sp, vy = -Math.sin(a) * sp;
+        for (let k = 0; k < 100; k++) { vy += 700 * 0.012; x += vx * 0.012; y += vy * 0.012; const dd = Math.hypot(x - tgt.x, y - tgt.y); if (dd < best) { best = dd; bestA = a; } }
+      }
+      p2.lx = Math.cos(bestA); p2.ly = Math.sin(bestA);
+      p2.a = Math.abs(bestA - e.aim) < 0.25;
+      return;
+    }
+    if (e.kind !== 'chase' || e.won) return;
     const [a1, a2] = e.av;
     if (e.weapon === 'coal') {
       if (e.coalHits < 2) tap(0, p1, 'a');
@@ -73,10 +93,10 @@ window.AUTO = {
     const d = e.d, s = Math.sign(d.x - e.weaponX) || 1;
     const sp = e.weapon === 'ballista' ? 1300 : 920, g = e.weapon === 'ballista' ? 180 : 900;
     let best = 1e9, bestA = e.aim;
-    for (let a = 0.15; a <= 1.35; a += 0.02) {
+    for (let a = -0.7; a <= 1.35; a += 0.02) {
       let x = e.weaponX, y = e.roofY - 40, vx = Math.cos(a) * sp * s, vy = -Math.sin(a) * sp, tt = 0;
       for (let k = 0; k < 120; k++) { vy += g * 0.01; x += vx * 0.01; y += vy * 0.01; tt += 0.01;
-        const dd = Math.hypot(x - (d.x + d.vx * tt), y - (d.y - 10 + d.vy * tt)); if (dd < best) { best = dd; bestA = a; } }
+        const dd = Math.hypot(x - (d.x + d.vx * tt), y - (d.y - 78 + d.vy * tt)); if (dd < best) { best = dd; bestA = a; } }
     }
     e.aim = bestA;
     if (best < 30) tap(0, p1, 'a');
@@ -117,13 +137,14 @@ window.AUTO = {
       target = Math.min(target, Math.sqrt((tr.segs[i].limit / 3.6 - 1) ** 2 + 2 * 0.45 * d));
     }
     target = Math.min(target, Math.sqrt(2 * 0.4 * Math.max(0, stopZ - t.pos - 2)));
+    if (G.blaze.state === 'idle' && G.blaze.pos > t.pos - 20) target = Math.min(target, Math.sqrt(2 * 0.4 * Math.max(0, G.blaze.pos - t.pos)));
     if (G.log.state === 'idle' && G.log.pos > t.pos) target = Math.min(target, Math.sqrt(2 * 0.4 * Math.max(0, G.log.pos - t.pos - 40)));
     if (G.depot && !G.depot.used) target = Math.min(target, Math.sqrt(2 * 0.4 * Math.max(0, G.depot.pos - t.pos - 2)));
     const atDepot = G.depot && !G.depot.used && G.depot.pos - t.pos < 30;
     p1.ly = 0; p1.lt = 0;
     if (t.v < target - 0.4) p1.ly = 1;
     else if (t.v > target + 0.2) { p1.ly = -1; p1.lt = clamp((t.v - target) * 0.6, 0, 1); }
-    if (stopZ - t.pos < 30 || atDepot || (G.log.state === 'idle' && G.log.pos - t.pos < 45)) { p1.ly = -1; p1.lt = 1; }
+    if (stopZ - t.pos < 30 || atDepot || (G.blaze.state === 'idle' && Math.abs(G.blaze.pos - t.pos) < 25) || (G.log.state === 'idle' && G.log.pos - t.pos < 45)) { p1.ly = -1; p1.lt = 1; }
     p1.a = t.slipping;
     p1.b = G.challenges.some(c => c.state === 'idle' && c.pos - t.pos < 200 && c.pos - t.pos > 0) || G.kids.some(c => !c.happy && Math.abs(c.pos - t.pos) < 80);
     p2.a = this.toggle && t.grate < 40 + 220 * t.reg && t.P < 14.8;

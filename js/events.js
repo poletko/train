@@ -147,8 +147,45 @@ function drawDragonFly(g, x, y, t, f, sc, o = {}) {
 }
 function fireBlob(g, x, y, r, k) { blobs(g, [[x, y, r], [x - r * 0.5, y + r * 0.3, r * 0.6]], k % 2 ? PAL.yellow : '#f0902a', 2, k); }
 
+// razbojnik s perjanico na klobuku jaha galopirajočega samoroga; (x, y) = kopita na tleh
+function drawRider(g, x, y, t, f, sc, o = {}) {
+  g.save(); g.translate(x, y); g.scale(f * sc, sc);
+  const gal = o.won || o.idle ? 0 : t * 13, bob = Math.sin(gal) * 3;
+  shadow(g, 0, 0, 40, 7);
+  for (const [lx, ph] of [[-24, 0], [-15, 1.6], [16, 0.8], [25, 2.4]]) inkLine(g, [lx, -24 + bob, lx + Math.sin(gal + ph) * 11, -2 + Math.min(0, Math.cos(gal + ph)) * 6], 5, INK, 0.3);
+  ['#e45b4a', '#f0a03a', '#f2d64a', '#6fb85a', '#4f8ad0'].forEach((c, i) => inkCurve(g, -30, -40 + bob, -50, -46 + i * 3, -60 + Math.sin(gal) * 5, -26 + i * 3, 3.5, c, i));
+  inkEllipse(g, 0, -36 + bob, 33, 15, PAL.white, 3, 1);
+  inkPoly(g, [16, -42 + bob, 28, -66 + bob, 42, -62 + bob, 32, -38 + bob], PAL.white, 3, 0.4, 4);
+  inkEllipse(g, 44, -66 + bob, 14, 9, PAL.white, 3, 5);
+  inkPoly(g, [40, -74 + bob, 48, -98 + bob, 50, -73 + bob], PAL.yellow, 2.5, 0.3, 6);
+  blobs(g, [[26, -68 + bob, 6], [21, -59 + bob, 6], [18, -50 + bob, 5]], '#e48ab8', 2, 7);
+  pieEye(g, 46, -68 + bob, 3.5, 1, 0, false, 8);
+  inkEllipse(g, 55, -63 + bob, 2, 1.5, '#e48ab8', 0, 9);
+  // jezdec
+  const ry = -44 + bob;
+  drawToon(g, -4, ry, { shirt: '#7a4a8a', pants: '#3a3a5a', sc: 0.82, face: 1, seed: 33, mood: o.stun ? 'oh' : o.won ? 'sad' : 'happy', wave: o.throwing });
+  const hy = ry - 57;                     // višina glave
+  // ruta čez nos in usta
+  inkPoly(g, [-12, hy + 2, 12, hy + 2, 6, hy + 13, 0, hy + 17, -6, hy + 12], PAL.red2, 2, 0.4, 34);
+  // širok klobuk z rdečo perjanico
+  inkEllipse(g, -4, hy - 9, 22, 5, '#3a2a22', 2.5, 35);
+  inkPoly(g, [-15, hy - 10, -13, hy - 24, 5, hy - 26, 7, hy - 10], '#3a2a22', 2.5, 0.4, 36);
+  const w = Math.sin(t * 9) * 3;
+  inkCurve(g, 2, hy - 22, -14, hy - 46 + w, -36, hy - 34 + w, 7, INK, 37); inkCurve(g, 2, hy - 22, -14, hy - 46 + w, -36, hy - 34 + w, 4.5, PAL.red, 37);
+  inkCurve(g, 0, hy - 20, -18, hy - 38 + w, -32, hy - 26 + w, 3, PAL.yellow, 38);
+  if (o.stun) stars(g, -4, hy - 40, 20, t, 3);
+  if (o.net) {
+    g.save(); g.globalAlpha = 0.85; g.beginPath(); g.ellipse(-2, hy + 10, 30, 44, 0, 0, 7); g.clip();
+    g.strokeStyle = '#e6d6a0'; g.lineWidth = 3;
+    for (let k = -6; k <= 6; k++) { g.beginPath(); g.moveTo(-40 + k * 12, hy - 40); g.lineTo(k * 12, hy + 60); g.moveTo(40 + k * 12, hy - 40); g.lineTo(k * 12, hy + 60); g.stroke(); }
+    g.restore();
+    if (o.net < 3) { inkEllipse(g, -2, hy + 10, 30, 44, null, 2, 39); }
+  }
+  g.restore();
+}
+
 const Events = (() => {
-  const modes = ['saw', 'jump', 'dragon'];
+  const modes = ['saw', 'jump', 'chase', 'fire', 'blaze'];
   const dirOf = p => (p.lx < -0.5 || p.left) ? -1 : (p.lx > 0.5 || p.right) ? 1 : 0;
 
   function start(G, kind) {
@@ -157,7 +194,9 @@ const Events = (() => {
     G.mode = kind;
     if (kind === 'saw') G.ev = { kind, t: 0, sp: 0, need: -1, prog: 0, jam: 0, jamCd: 0, done: 0, dust: [], sawT: 0, strokes: 0 };
     else if (kind === 'jump') startJump(G);
-    else startDragon(G);
+    else if (kind === 'chase') startChase(G);
+    else if (kind === 'blaze') startBlaze(G);
+    else startFire(G);
   }
 
   // ---------- vožnja: sprožilci ----------
@@ -176,10 +215,20 @@ const Events = (() => {
     if (G.jump && G.jump.state === 'idle' && t.pos >= G.jump.pos - JUMP_RAMP && t.pos < G.jump.pos && t.v > 0) {
       G.jump.state = 'fly'; G.jump.v = t.v; start(G, 'jump'); return true;
     }
-    if (G.dragon && G.dragon.state === 'idle' && G.dragon.pos && t.pos > G.dragon.pos - 40 && t.pos < G.dragon.pos + 300) {
+    if (G.chase && G.chase.state === 'idle' && G.chase.pos && t.pos > G.chase.pos - 40 && t.pos < G.chase.pos + 300) {
+      G.chase.state = 'fight'; Snd.whee();
+      G.msg('Razbojnik na samorogu lovi vlak!', '#f3c2b2', 3);
+      transition(() => start(G, 'chase')); return true;
+    }
+    if (G.dragon && G.dragon.state === 'idle' && G.dragon.pos && t.pos > G.dragon.pos - 20 && t.pos < G.dragon.tunnel) {
       G.dragon.state = 'fight'; Snd.roar();
-      G.msg('Zmaj se je razjezil in napada vlak!', '#f3c2b2', 3);
-      transition(() => start(G, 'dragon')); return true;
+      G.msg('Zmaj je ušel vitezu in napada vlak!', '#f3c2b2', 3);
+      transition(() => start(G, 'fire')); return true;
+    }
+    if (G.blaze && G.blaze.state === 'idle' && G.blaze.pos) {
+      const d = G.blaze.pos - t.pos;
+      if (Math.abs(t.v) < 0.05 && Math.abs(d) < 70) { G.blaze.state = 'fight'; transition(() => start(G, 'blaze')); return true; }
+      if (d < -90) { G.blaze.state = 'missed'; G.addPoints(-20); G.msg('Peljali ste mimo goreče hiše! −20', '#f3c2b2', 4); Snd.bad(); }
     }
     return false;
   }
@@ -192,6 +241,10 @@ const Events = (() => {
     if (G.jump && G.jump.state === 'idle') {
       const d = G.jump.pos - JUMP_RAMP - t.pos, kmh = Math.abs(t.v) * 3.6;
       if (d > 0 && d < 700) return { text: `SKAKALNICA čez ${Math.round(d)} m – vsaj ${JUMP_KMH} km/h! (zdaj ${Math.round(kmh)})`, col: kmh >= JUMP_KMH ? '#d9ecc4' : '#fff0b8' };
+    }
+    if (G.blaze && G.blaze.state === 'idle' && G.blaze.pos) {
+      const d = G.blaze.pos - t.pos;
+      if (d > -90 && d < 700) return { text: Math.abs(d) < 70 ? 'USTAVI! Gostilna gori – pomagajta gasiti!' : `Ob progi gori hiša čez ${Math.round(d)} m – ustavi pri njej!`, col: '#f3c2b2' };
     }
     return null;
   }
@@ -449,82 +502,86 @@ const Events = (() => {
     if (e.end && e.landed >= e.cars.length) burstText(g, W / 2, 200, 'PRESKOČENO!', 1.3);
   }
 
-  // ---------- 3) zmaj ----------
+  // ---------- 3) razbojnik na samorogu ----------
   const DR = { gy: 610, M: 13.5, front: 1190 };
-  function startDragon(G) {
+  const RG = DR.gy + 74;           // tla pred progo, kjer galopira samorog
+  const foeY = d => d.y - 78;      // središče razbojnika (za zadetke)
+  function startChase(G) {
     const cars = trainCars(G.train), { M, front } = DR;
     const xs = cars.map(c => ({ ...c, x: front - c.off * M }));
     const wag = xs.filter(c => c.type === 'P' || c.type === 'F');
     const last = wag[wag.length - 1], labCar = wag[Math.min(2, wag.length - 1)];
     const roofY = DR.gy - 96 * M / SIDE_U;
-    G.ev = { kind: 'dragon', t: 0, scroll: 0, cars: xs, roofY,
+    G.ev = { kind: 'chase', t: 0, scroll: 0, cars: xs, roofY,
       minX: last.x - 6 * M + 18, maxX: wag[0].x + 6 * M - 18,
       weaponX: last.x - 30, labX: labCar.x, labCar: wag.indexOf(labCar),
-      weapon: 'coal', loaded: false, loadT: 0, aim: 0.8, coalHits: 0, catHits: 0, hp: 3, lab: null,
+      weapon: 'coal', loaded: false, loadT: 0, aim: 0.3, coalHits: 0, catHits: 0, hp: 3, lab: null,
       av: [{ x: wag[0].x - 40, f: -1, stun: 0, cd: 0, soot: 0, ph: 0, mv: false }, { x: last.x + 50, f: -1, stun: 0, cd: 0, soot: 0, ph: 0, mv: false }],
-      d: { x: -200, y: 200, vx: 0, vy: 0, phi: -1.6, mode: 'enter', t: 0, attackT: 4, stun: 0, tx: 0, ty: 0, say: 'GRRRR! Moj vlak!', sayT: 2.5, f: 1, blend: 0 },
-      shots: [], fire: [], fx: [], hint: 0, won: 0 };
+      d: { x: -200, y: RG, vx: 0, vy: 0, phi: -1.6, mode: 'enter', t: 0, attackT: 4, stun: 0, say: 'Ju-hu! Ustavite vlak!', sayT: 2.5, f: 1, hop: 0, hopT: 2, lasso: null, trail: [] },
+      shots: [], fx: [], hint: 0, won: 0 };
   }
   function say(d, txt, t = 2) { d.say = txt; d.sayT = t; }
-  function updateDragon(G, dt) {
+  function updateChase(G, dt) {
     const e = G.ev, d = e.d;
     e.t += dt; e.scroll += 340 * dt;
     d.sayT = Math.max(0, d.sayT - dt);
-    // zmaj
     d.t += dt;
     const ox = d.x, oy = d.y;
+    // skoki samoroga z mavrico
+    let hopH = 0;
+    if (d.hop > 0) { d.hop += dt / 1.1; hopH = Math.sin(Math.PI * Math.min(1, d.hop)) * 200; if (d.hop >= 1) { d.hop = 0; d.hopT = 2.2 + Math.random() * 2; } }
     if (e.won) {
       e.won += dt;
-      d.x += 160 * dt; d.y -= 60 * dt + Math.sin(e.won * 6) * 2;
+      d.x -= 260 * dt; d.y = RG;
       if (e.won > 4.5 && !G.trans) transition(() => {
-        G.mode = 'drive'; G.ev = null; G.dragon.state = 'done'; World.snap();
-        G.msg('Zmaj je odletel domov. Vitez ploska!', PAL.yellow, 4); whistleTimer = 1;
+        G.mode = 'drive'; G.ev = null; G.chase.state = 'done'; World.snap();
+        G.msg('Razbojnik obvisi v mreži, samorog se pase naprej.', PAL.yellow, 4); whistleTimer = 1;
       });
     } else if (d.stun > 0) {
-      d.stun -= dt; d.y = Math.min(d.y + 60 * dt, 420);
+      d.stun -= dt; d.x -= 60 * dt; d.y = RG;
     } else if (d.mode === 'enter') {
-      d.x += 260 * dt; d.y = 200 + Math.sin(d.t * 2) * 30;
-      if (d.x > 300) { d.mode = 'circle'; d.phi = Math.asin(clamp((d.x - 680) / 470, -1, 1)); }
-    } else if (d.mode === 'circle') {
-      d.phi += dt * 0.55;
-      const cx = 680 + 470 * Math.sin(d.phi), cy = 200 + 90 * Math.sin(2 * d.phi);
-      d.blend = Math.min(1, d.blend + dt);
-      d.x = lerp(d.x, cx, d.blend < 1 ? dt * 3 : 1); d.y = lerp(d.y, cy, d.blend < 1 ? dt * 3 : 1);
+      d.x += 300 * dt; d.y = RG;
+      if (d.x > 260) { d.mode = 'ride'; d.phi = Math.asin(clamp((d.x - 660) / 430, -1, 1)); }
+    } else if (d.mode === 'ride') {
+      d.phi += dt * 0.45;
+      d.x = lerp(d.x, 660 + 430 * Math.sin(d.phi), Math.min(1, dt * 3));
+      d.hopT -= dt; if (d.hopT <= 0 && !d.hop) d.hop = 0.01;
+      d.y = RG - hopH;
       d.attackT -= dt;
-      if (d.attackT <= 0) {
+      if (d.attackT <= 0 && !d.hop) {
         const tg = e.av.filter(a => !a.stun);
-        const a = tg.length ? tg[Math.floor(Math.random() * tg.length)] : e.av[0];
-        d.mode = 'swoop'; d.t = 0; d.tgt = a;
-        say(d, ['Ogenj za vse!', 'Hrrrr!', 'Pazi, vroče!', 'Pečen premog!'][Math.floor(Math.random() * 4)], 1.6);
+        d.tgt = tg.length ? tg[Math.floor(Math.random() * tg.length)] : e.av[0];
+        d.mode = 'chase'; d.t = 0;
+        say(d, ['Hej, premog je moj!', 'Ju-hu-huuu!', 'Primem te z lasom!', 'Ustavite vlak!'][Math.floor(Math.random() * 4)], 1.6);
       }
-    } else if (d.mode === 'swoop') {
+    } else if (d.mode === 'chase') {
       const side = d.tgt.x > 640 ? -1 : 1;
-      const tx = d.tgt.x + side * 150, ty = e.roofY - 190;
-      d.x = lerp(d.x, tx, Math.min(1, dt * 2.5)); d.y = lerp(d.y, ty, Math.min(1, dt * 2.5));
-      d.f = -side;
-      if (d.t > 1.1) { d.mode = 'breathe'; d.t = 0; Snd.fire(); }
-    } else if (d.mode === 'breathe') {
-      const mx = d.x + d.f * 96 * 1.3, my = d.y - 40 * 1.3;
-      if (Math.random() < dt * 40) {
-        const tx = d.tgt.x + (Math.random() - 0.5) * 60, ty = e.roofY - 30;
-        const T = 0.7, k = 1 / T;
-        e.fire.push({ x: mx, y: my, vx: (tx - mx) * k, vy: (ty - my) * k, life: T + 0.3, r: 8 });
+      d.x = lerp(d.x, d.tgt.x + side * 130, Math.min(1, dt * 2.5)); d.y = RG; d.f = -side;
+      if (d.t > 1.1) {
+        d.mode = 'throw'; d.t = 0; Snd.toss();
+        d.lasso = { t: 0, T: 0.65, tx: d.tgt.x, ty: e.roofY - 50, tgt: d.tgt };
       }
-      if (d.t > 1.4) { d.mode = 'circle'; d.blend = 0; d.attackT = 3.5 + Math.random() * 2.5; d.phi = Math.asin(clamp((d.x - 680) / 470, -1, 1)); }
+    } else if (d.mode === 'throw') {
+      d.y = RG;
+      if (d.t > 1.2) { d.mode = 'ride'; d.attackT = 3.5 + Math.random() * 2.5; d.phi = Math.asin(clamp((d.x - 660) / 430, -1, 1)); }
+    }
+    if (d.lasso) {
+      const L = d.lasso; L.t += dt;
+      if (L.t >= L.T && !L.done) {
+        L.done = true;
+        const a = L.tgt;
+        if (!a.stun && Math.abs(a.x - L.tx) < 36 && !e.won) {
+          a.stun = 1.8; G.addPoints(-2); Snd.bad(); Ctl.rumble(e.av.indexOf(a), 0.7, 0.7, 250);
+          G.msg(`${e.av.indexOf(a) ? 'Kurjača' : 'Strojevodjo'} je ujel z lasom! −2`, '#f3c2b2', 1.5);
+        } else say(d, 'Ojoj, zgrešil!', 1.2);
+      }
+      if (L.t > L.T + 0.4) d.lasso = null;
     }
     d.vx = (d.x - ox) / Math.max(dt, 1e-4); d.vy = (d.y - oy) / Math.max(dt, 1e-4);
-    if (d.mode !== 'swoop' && d.mode !== 'breathe' && Math.abs(d.vx) > 5) d.f = Math.sign(d.vx);
-    // ogenj
-    for (const f of e.fire) {
-      f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt; f.r += dt * 14;
-      if (f.y > e.roofY - 40) { f.vy *= 0.3; f.vx *= 0.5; }
-      for (const a of e.av) if (!a.stun && !e.won && Math.abs(f.x - a.x) < 26 && f.y > e.roofY - 80 && f.y < e.roofY) {
-        a.stun = 1.6; a.soot = 6; G.addPoints(-2); Snd.bad();
-        Ctl.rumble(e.av.indexOf(a), 0.7, 0.7, 250);
-        G.msg(`${e.av.indexOf(a) ? 'Kurjača' : 'Strojevodjo'} je opeklo! −2`, '#f3c2b2', 1.5);
-      }
-    }
-    e.fire = e.fire.filter(f => f.life > 0);
+    if (d.mode !== 'chase' && d.mode !== 'throw' && !e.won && Math.abs(d.vx) > 5) d.f = Math.sign(d.vx);
+    d.trail.push({ x: d.x - d.f * 40, y: d.y - 46, life: 0.7 });
+    for (const p of d.trail) { p.x -= 340 * dt; p.life -= dt; }
+    d.trail = d.trail.filter(p => p.life > 0);
     // igralca
     for (let i = 0; i < 2; i++) {
       const a = e.av[i], p = Ctl.p[i];
@@ -536,7 +593,7 @@ const Events = (() => {
       const atW = Math.abs(a.x - e.weaponX) < 50, atLab = Math.abs(a.x - e.labX) < 40;
       if (atW && e.weapon !== 'coal') {
         const ay = clamp(p.ly + (p.up ? 1 : 0) - (p.down ? 1 : 0), -1, 1);
-        e.aim = clamp(e.aim + ay * dt * 0.9, 0.15, 1.35);
+        e.aim = clamp(e.aim + ay * dt * 0.9, -0.7, 1.35);
       }
       if (Ctl.pressed(i, 'y') && atLab) { enterLab(G); return; }
       if (Ctl.pressed(i, 'a') && !a.cd) {
@@ -549,19 +606,19 @@ const Events = (() => {
     // izstrelki
     for (const s of e.shots) {
       s.vy += s.g * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.rot += dt * 8;
-      if (!s.hit && !e.won && Math.hypot((s.x - d.x) / 1.3, s.y - (d.y - 10)) < (s.kind === 'coal' ? 52 : 62)) { s.hit = true; hit(G, s); }
+      if (!s.hit && !e.won && Math.hypot((s.x - d.x) / 1.2, s.y - foeY(d)) < (s.kind === 'coal' ? 55 : 66)) { s.hit = true; hit(G, s); }
     }
     e.shots = e.shots.filter(s => !s.hit && s.y < H + 50 && s.x > -100 && s.x < W + 100);
     for (const f of e.fx) f.t += dt;
     e.fx = e.fx.filter(f => f.t < 1);
     e.hint += dt;
   }
-  // smer metanja: proti zmaju
+  // smer metanja: proti razbojniku
   const sideOf = (e, x) => Math.sign(e.d.x - x) || 1;
   function throwCoal(G, a) {
     const e = G.ev, d = e.d;
-    const x = a.x, y = e.roofY - 60, T = clamp(Math.hypot(d.x - x, d.y - y) / 650, 0.45, 1.1), g = 900;
-    const tx = d.x + d.vx * T * 0.8 + (Math.random() - 0.5) * 70, ty = d.y + d.vy * T * 0.8 + (Math.random() - 0.5) * 60;
+    const x = a.x, y = e.roofY - 60, T = clamp(Math.hypot(d.x - x, foeY(d) - y) / 650, 0.45, 1.1), g = 900;
+    const tx = d.x + d.vx * T * 0.8 + (Math.random() - 0.5) * 70, ty = foeY(d) + d.vy * T * 0.6 + (Math.random() - 0.5) * 60;
     e.shots.push({ kind: 'coal', x, y, vx: (tx - x) / T, vy: (ty - y) / T - 0.5 * g * T, g, rot: 0 });
     a.cd = 0.45; a.f = sideOf(e, x); a.throwT = 0.25; Snd.toss();
     if (G.train.coal > 5) G.train.coal -= 2;
@@ -581,35 +638,35 @@ const Events = (() => {
     e.fx.push({ x: s.x, y: s.y, t: 0, text: s.kind === 'coal' ? 'BONK!' : s.kind === 'catapult' ? 'TRESK!' : 'ŽVIIIK!' });
     if (s.kind === 'coal') {
       e.coalHits++; Snd.bonk(); G.addPoints(1);
-      say(d, ['Hihi, žgečka!', 'To je vse?', 'Mmm, premog!', 'Haha!'][e.coalHits % 4], 1.4);
+      say(d, ['Haha, žgečka!', 'To je vse?', 'Hej, moj klobuk!', 'Hihi!'][e.coalHits % 4], 1.4);
     } else if (s.kind === 'catapult') {
       e.catHits++; d.stun = 1.6; Snd.clank(); G.addPoints(5);
-      say(d, e.catHits >= 2 ? 'Grrr! To me ne ustavi!' : 'AUU! Moja glava!', 2);
+      say(d, e.catHits >= 2 ? 'Grrr! To me ne ustavi!' : 'AUU! Moja perjanica!', 2);
       if (e.catHits === 2) G.msg('Katapult ni dovolj! V laboratoriju razvijajo balisto.', PAL.yellow, 4);
     } else {
       e.hp--; d.stun = 2; Snd.clank(); G.addPoints(10);
       if (e.hp <= 0) {
-        e.won = 0.01; d.stun = 0; G.addPoints(50); G.score.dragon = true;
-        say(d, 'Oprostite! Ne bom več! Bu-hu!', 4.5);
-        G.msg('ZMAJ JE PREMAGAN! +50', '#d9ecc4', 4); Snd.good(); Snd.roar();
+        e.won = 0.01; d.stun = 0; d.lasso = null; G.addPoints(50); G.score.chase = true;
+        say(d, 'Ujet sem! Prav, prav, vdam se!', 4.5);
+        G.msg('RAZBOJNIK JE UJET! +50', '#d9ecc4', 4); Snd.good();
       } else say(d, e.hp === 2 ? 'Kaj je to?! Mreža!' : 'Ne! Še ena mreža!', 2);
     }
   }
   function enterLab(G) {
     const e = G.ev;
     if (e.weapon === 'ballista') { G.msg('Balista je že na zadnjem vagonu!', PAL.yellow, 2); return; }
-    if (e.weapon === 'catapult' && e.catHits < 2) { G.msg('Najprej preizkusita katapult na zmaju!', PAL.yellow, 2.5); return; }
+    if (e.weapon === 'catapult' && e.catHits < 2) { G.msg('Najprej preizkusita katapult na razbojniku!', PAL.yellow, 2.5); return; }
     e.lab = e.weapon === 'coal' ? 'catapult' : 'ballista';
     Snd.click();
     Quiz.open(G, 'lab', { max: 3, onEnd: () => {
       e.weapon = e.lab; e.loaded = false; e.aim = 0.8;
       for (const a of e.av) a.x = e.weaponX + (a === e.av[0] ? 70 : 20);
-      G.msg(e.lab === 'catapult' ? 'Katapult je na zadnjem vagonu! A naloži in izstreli, palica gor/dol meri' : 'Balista je pripravljena! Naloži in meri v zmaja!', '#d9ecc4', 5);
+      G.msg(e.lab === 'catapult' ? 'Katapult je na zadnjem vagonu! A naloži in izstreli, palica gor/dol meri' : 'Balista z mrežo je pripravljena! Naloži in meri v razbojnika!', '#d9ecc4', 5);
       e.lab = null; Snd.good();
     } });
   }
 
-  function drawDragonScene(g, G) {
+  function drawChaseScene(g, G) {
     const e = G.ev, d = e.d, { gy, M } = DR;
     backdrop(g, e.scroll, gy, { top: '#e7b892', bottom: '#f4e2c0', far: '#a7a08a', hill: '#879a58' });
     g.fillStyle = '#9aa860'; g.fillRect(0, gy, W, H - gy);
@@ -647,20 +704,32 @@ const Events = (() => {
       else if (s.kind === 'catapult') { inkEllipse(g, s.x, s.y, 16, 14, PAL.rock, 3, 800); inkLine(g, [s.x - 6, s.y - 4, s.x + 4, s.y + 2], 2, PAL.rock2, 0.3); }
       else { g.save(); g.translate(s.x, s.y); g.rotate(Math.atan2(s.vy, s.vx)); inkLine(g, [-30, 0, 20, 0], 5, PAL.woodDark, 0.3); inkPoly(g, [20, -7, 34, 0, 20, 7], '#c8ccd0', 2, 0.3, 801); inkPoly(g, [-30, 0, -40, -8, -36, 0, -40, 8], PAL.red, 2, 0.3, 802); g.restore(); }
     }
-    // zmaj
-    drawDragonFly(g, d.x, d.y, G.time, d.f, 1.3, { breath: d.mode === 'breathe', stun: d.stun > 0 || e.won, net: 3 - e.hp, angry: d.mode === 'swoop' });
-    for (const f of e.fire) fireBlob(g, f.x, f.y, f.r, Math.floor(f.x));
+    // razbojnik na samorogu z mavrico in lasom
+    const RB = ['#e45b4a', '#f0a03a', '#f2d64a', '#6fb85a', '#4f8ad0', '#9a6ac8'];
+    for (let k = 1; k < d.trail.length; k++) {
+      const p0 = d.trail[k - 1], p1 = d.trail[k];
+      RB.forEach((c, i) => { g.beginPath(); g.moveTo(p0.x, p0.y + i * 4); g.lineTo(p1.x, p1.y + i * 4); g.globalAlpha = Math.min(1, p1.life * 2); stroke(g, 4.5, c); });
+    }
+    g.globalAlpha = 1;
+    drawRider(g, d.x, d.y, G.time, d.f, 1.3, { stun: d.stun > 0, net: 3 - e.hp, won: e.won, throwing: d.mode === 'throw' || d.mode === 'chase' });
+    if (d.lasso) {
+      const L = d.lasso, k = Math.min(1, L.t / L.T), back = L.t > L.T ? 1 - (L.t - L.T) / 0.4 : 1;
+      const hx = d.x + d.f * 18 * 1.3, hy = d.y - 112 * 1.3;
+      const tx = lerp(hx, L.tx, k * back), ty = lerp(hy, L.ty, k * back) - Math.sin(Math.PI * k) * 60 * back;
+      g.beginPath(); g.moveTo(hx, hy); g.quadraticCurveTo((hx + tx) / 2, Math.min(hy, ty) - 40, tx, ty); stroke(g, 3, '#c9a061');
+      inkEllipse(g, tx, ty, 18, 10, null, 3, 812, Math.sin(G.time * 10) * 0.4);
+    }
     for (const f of e.fx) burstText(g, f.x, f.y - 40, f.text, 0.6 + f.t * 0.3, PAL.yellow, 810);
     if (d.sayT > 0) World.bubble(g, d.x + d.f * 60, d.y - 130, d.say, 18);
     // HUD
     card(g, W / 2 - 360, 12, 720, 104, PAL.cream, 820, 14);
-    toonText(g, e.won ? 'ZMAJ JE PREMAGAN!' : 'ZMAJ NAPADA!', W / 2, 40, 28, PAL.red, 'center', FONT_T, 5);
+    toonText(g, e.won ? 'RAZBOJNIK JE UJET!' : 'RAZBOJNIK NA SAMOROGU!', W / 2, 40, 28, PAL.red, 'center', FONT_T, 5);
     const name = { coal: 'premog', catapult: 'katapult', ballista: 'balista' }[e.weapon];
     plainText(g, `Orožje: ${name}`, W / 2 - 330, 72, 16, INK, 'left');
     for (let k = 0; k < 3; k++) inkPoly(g, HUD.star(W / 2 + 230 + k * 36, 40, 15, 7), k < 3 - e.hp ? '#e6d6a0' : PAL.cream, 2.5, 0.4, 830 + k);
-    plainText(g, 'mreže', W / 2 + 266, 70, 12, INK, 'center');
+    plainText(g, 'mreže:', W / 2 + 208, 41, 13, INK, 'right');
     let tip;
-    if (e.weapon === 'coal') tip = e.coalHits >= 2 || e.hint > 12 ? 'Premog ga ne ustavi! Pojdita v LABORATORIJ  (Y pri loputi)' : 'Mečita premog v zmaja';
+    if (e.weapon === 'coal') tip = e.coalHits >= 2 || e.hint > 12 ? 'Premog ga ne ustavi! Pojdita v LABORATORIJ  (Y pri loputi)' : 'Mečita premog v razbojnika';
     else if (e.weapon === 'catapult') tip = e.catHits >= 2 ? 'Katapult ni dovolj! V LABORATORIJ po balisto  (Y)' : 'Pri katapultu: A naloži / izstreli, palica gor/dol meri';
     else tip = 'Pri balisti: A naloži / izstreli, gor/dol meri – zadenita 3×!';
     plainText(g, tip, W / 2 - 330, 96, 15, PAL.red2, 'left');
@@ -707,11 +776,11 @@ const Events = (() => {
     const q = G.quiz, e = G.ev;
     g.fillStyle = '#7a5232'; g.fillRect(0, 0, W, H);
     for (let x = 0; x < W; x += 64) inkLine(g, [x, 0, x, H], 2, '#5e3b22', 0.4, x);
-    // okno z zmajem
+    // okno z razbojnikom
     inkEllipse(g, 120, 130, 80, 80, '#e7b892', 6, 870);
     g.save(); g.beginPath(); g.arc(120, 130, 76, 0, 7); g.clip();
     blobs(g, [[80, 190, 40], [160, 200, 50]], '#879a58', 2, 871);
-    drawDragonFly(g, 120 + Math.sin(G.time * 1.3) * 60, 130 + Math.sin(G.time * 2.6) * 20, G.time, Math.cos(G.time * 1.3) > 0 ? 1 : -1, 0.45, {});
+    drawRider(g, 120 + Math.sin(G.time * 1.3) * 50, 190 - Math.abs(Math.sin(G.time * 2.6)) * 30, G.time, Math.cos(G.time * 1.3) > 0 ? 1 : -1, 0.5, {});
     g.restore();
     inkLine(g, [44, 130, 196, 130], 4, '#5e3b22', 0.3); inkLine(g, [120, 54, 120, 206], 4, '#5e3b22', 0.3);
     // police z bučkami
@@ -765,6 +834,355 @@ const Events = (() => {
     lx = legend(g, lx + 24, 690, ['L↔'], 'premik', 15, PAL.cream); legend(g, lx + 24, 690, ['A'], 'potrdi (oba lahko)', 15, PAL.cream);
   }
 
+  // ---------- 4) zmaj in vodna brizgalna ----------
+  // strojevodja črpa vodo (palica gor-dol), kurjač meri z brizgalno; ko vlak zapelje v predor, je zmaja konec
+  const FR = { gy: 600, M: 13.5, front: 1190, passes: 6, fbG: 200 };
+  function startFire(G) {
+    const cars = trainCars(G.train), { M, front } = FR;
+    const xs = cars.map(c => ({ ...c, x: front - c.off * M, burn: 0 }));
+    const wag = xs.filter(c => c.type === 'P' || c.type === 'F');
+    const roofY = FR.gy - 96 * M / SIDE_U;
+    G.ev = { kind: 'fire', t: 0, scroll: 0, cars: xs, roofY,
+      pumpX: wag[0].x - 10, hoseX: wag[Math.min(2, wag.length - 1)].x + 10,
+      press: 0.4, pumpDir: 0, handle: 0, aim: 0.7, spraying: false, drops: [], balls: [], steam: [], fx: [],
+      pass: 0, tunnel: null, done: 0, doused: 0, burnPts: 0, sneezes: 0,
+      d: { x: -300, y: 170, y0: 170, f: 1, dir: 1, mode: 'wait', t: 0, queue: [], say: 'Grrr! Zdaj ste moji!', sayT: 2.5, wet: 0, sneeze: false, spitT: 0, fall: 0 } };
+  }
+  // strojevodja črpa (palica gor-dol), kurjač meri brizgalno (palica) in brizga (A ali RT)
+  function pumpAndHose(G, e, dt) {
+    const p1 = Ctl.p[0], p2 = Ctl.p[1];
+    const ly = clamp(p1.ly + (p1.up ? 1 : 0) - (p1.down ? 1 : 0), -1, 1);
+    e.handle = lerp(e.handle, ly, Math.min(1, dt * 14));
+    if (ly > 0.6 && e.pumpDir !== 1) { e.pumpDir = 1; e.press = Math.min(1, e.press + 0.08); Snd.pump(); }
+    if (ly < -0.6 && e.pumpDir !== -1) { e.pumpDir = -1; e.press = Math.min(1, e.press + 0.08); Snd.pump(); }
+    // brizgalna: palica pokaže smer, A ali RT brizga
+    const vx = p2.lx + (p2.right ? 1 : 0) - (p2.left ? 1 : 0), vy = p2.ly + (p2.up ? 1 : 0) - (p2.down ? 1 : 0);
+    if (Math.hypot(vx, vy) > 0.35) {
+      const want = Math.atan2(vy, vx);
+      let da = want - e.aim; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      e.aim += clamp(da, -dt * 4, dt * 4);
+    }
+    e.spraying = (p2.a || p2.rt > 0.3) && e.press > 0.04 && !e.done;
+    const nx = e.hoseX + Math.cos(e.aim) * 44, ny = e.roofY - 52 - Math.sin(e.aim) * 44;
+    if (e.spraying) {
+      e.press = Math.max(0, e.press - dt * 0.3);
+      const sp = 480 + 460 * e.press;
+      for (let k = 0; k < 3; k++) {
+        const a = e.aim + (Math.random() - 0.5) * 0.08;
+        e.drops.push({ x: nx, y: ny, vx: Math.cos(a) * sp, vy: -Math.sin(a) * sp, life: 1.6 });
+      }
+      if (G.train.water > 1) G.train.water -= dt * 0.02;
+    }
+  }
+  function drawRig(g, e) {
+    const px = e.pumpX, py = e.roofY;
+    inkPoly(g, [px + 34, py, px + 86, py, px + 86, py - 40, px + 34, py - 40], '#6a8ab0', 3, 0.5, 940);
+    inkLine(g, [px + 34, py - 20, px + 86, py - 20], 2, '#4a6a90', 0.3);
+    plainText(g, 'VODA', px + 60, py - 30, 11, PAL.cream, 'center');
+    inkPoly(g, [px - 8, py, px + 8, py, px + 4, py - 46, px - 4, py - 46], PAL.woodDark, 2.5, 0.3, 941);
+    const la = e.handle * 0.5, lx0 = px - Math.cos(la) * 26, ly0 = py - 46 + Math.sin(la) * 26, lx1 = px + Math.cos(la) * 60, ly1 = py - 46 - Math.sin(la) * 60;
+    inkLine(g, [lx0, ly0, lx1, ly1], 6, PAL.wood, 0.3);
+    inkEllipse(g, px, py - 46, 6, 6, PAL.brass, 2, 942);
+    inkLine(g, [px + 86, py - 6, (px + e.hoseX) / 2, py - 2, e.hoseX - 10, py - 10], 5, '#4a4038', 0.5, 943);
+    // brizgalna
+    const hx = e.hoseX, hy = e.roofY - 52;
+    inkPoly(g, [hx - 18, py, hx + 18, py, hx + 10, py - 30, hx - 10, py - 30], PAL.red2, 3, 0.4, 944);
+    g.save(); g.translate(hx, hy); g.rotate(-e.aim);
+    inkPoly(g, [-10, -9, 44, -6, 44, 6, -10, 9], PAL.brass, 3, 0.4, 945);
+    inkEllipse(g, 44, 0, 4, 7, '#a07a2a', 2, 946);
+    g.restore();
+    // igralca: strojevodja pri ročici, kurjač za brizgalno
+    const t1 = px + 104, t2 = hx - 52;
+    drawToon(g, t1, e.roofY + 2, { ...P1_LOOK, sc: 0.95, face: -1, mood: e.press < 0.15 ? 'oh' : 'happy', hand: [(lx1 - t1) / 0.95, (ly1 - e.roofY - 2) / 0.95] });
+    drawToon(g, t2, e.roofY + 2, { ...P2_LOOK, sc: 0.95, face: 1, mood: e.cars.some(c => c.burn > 0) || (e.spots && e.spots.some(f => f.burn > 0)) ? 'oh' : 'happy', hand: [(hx - 6 - t2) / 0.95, (hy - e.roofY - 2) / 0.95] });
+    plainText(g, 'P1 črpa', t1, e.roofY - 108, 12, PAL.red2, 'center');
+    plainText(g, 'P2 brizga', t2, e.roofY - 108, 12, PAL.teal2, 'center');
+  }
+  function updateFire(G, dt) {
+    const e = G.ev, d = e.d;
+    e.t += dt; e.scroll += 340 * dt;
+    d.t += dt; d.sayT = Math.max(0, d.sayT - dt); d.spitT = Math.max(0, d.spitT - dt);
+    pumpAndHose(G, e, dt);
+    // zmaj: preleti čez vlak in pljuva ognjene krogle
+    if (d.mode === 'wait') {
+      if (d.t > (e.pass ? 1.4 : 2.4)) {
+        if (e.pass < FR.passes) {
+          d.dir = e.pass % 2 ? -1 : 1; d.f = d.dir; d.mode = 'pass'; d.t = 0;
+          d.x = d.dir > 0 ? -160 : W + 160; d.y0 = 130 + Math.random() * 70;
+          const burnable = e.cars.filter(c => c.type !== 'loco');
+          const pick = [...burnable].sort(() => Math.random() - 0.5).slice(0, e.pass < 2 ? 2 : 3);
+          d.queue = pick.map(c => c.x).sort((a, b) => d.dir * (a - b));
+          if (e.pass === 2) say(d, 'Hrrr! Še bolj vroče!', 1.6);
+        } else if (!e.balls.length) {
+          e.tunnel = { x: W + 260 }; d.mode = 'final'; d.t = 0; d.dir = 1; d.f = 1; d.x = -160; d.y0 = 300;
+          say(d, 'Ne uidete mi!', 2);
+          G.msg('Predor je blizu – zdržita še malo!', PAL.yellow, 3);
+        }
+      }
+    } else if (d.mode === 'pass') {
+      d.x += d.dir * 300 * dt; d.y = d.y0 + Math.sin(d.t * 3) * 30;
+      const q = d.queue[0];
+      if (q !== undefined && d.dir * (d.x - (q - d.dir * 200)) >= 0) {
+        d.queue.shift();
+        if (d.sneeze) { d.sneeze = false; say(d, 'Apčiha! Ugasnil sem!', 1.4); }
+        else {
+          const mx = d.x + d.f * 96 * 1.3, my = d.y - 40 * 1.3, T = 1.1;
+          const tx = q + (Math.random() - 0.5) * 50, ty = e.roofY - 12;
+          e.balls.push({ x: mx, y: my, vx: (tx - mx) / T, vy: (ty - my) / T - 0.5 * FR.fbG * T, r: 18 });
+          d.spitT = 0.5; Snd.fire();
+        }
+      }
+      if ((d.dir > 0 && d.x > W + 180) || (d.dir < 0 && d.x < -180)) { e.pass++; d.mode = 'wait'; d.t = 0; }
+    } else if (d.mode === 'final') {
+      d.x += 250 * dt; d.y = d.y0 + Math.sin(d.t * 3) * 20;
+      if (e.tunnel && d.x + 110 > e.tunnel.x) {
+        d.mode = 'bonk'; d.t = 0; Snd.bonk(); Snd.clank();
+        e.fx.push({ x: d.x + 60, y: d.y - 40, t: 0, text: 'BONK!' });
+        say(d, 'Auuu! Kdo je postavil goro?!', 2.5); G.addPoints(10);
+      }
+    } else if (d.mode === 'bonk') {
+      d.fall += dt; d.x -= 80 * dt; d.y += 160 * dt * Math.min(1, d.fall);
+    }
+    if (e.tunnel) {
+      e.tunnel.x -= 340 * dt;
+      if (e.tunnel.x < 140 && !e.done) {
+        e.done = 0.01;
+        const burning = e.cars.filter(c => c.burn > 0).length;
+        if (!burning) { G.addPoints(20); G.msg('Vlak je cel! +20', '#d9ecc4', 4); }
+        else G.msg(`V predor ste pripeljali ${burning} ${burning === 1 ? 'goreč vagon' : 'goreče vagone'}.`, '#f3c2b2', 4);
+        G.score.fire = e.doused;
+      }
+    }
+    if (e.done) {
+      e.done += dt;
+      if (e.done > 1.2 && !G.trans) transition(() => {
+        const t = G.train;
+        G.mode = 'drive'; G.ev = null; G.dragon.state = 'done';
+        t.pos = G.dragon.tunnel + 12; World.snap();
+        G.msg('Zmaj je ostal pred predorom. Uf!', PAL.yellow, 3);
+      });
+    }
+    // ognjene krogle
+    for (const b of e.balls) {
+      b.vy += FR.fbG * dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.y >= e.roofY - 12) {
+        b.dead = true;
+        const c = e.cars.find(c => c.type !== 'loco' && Math.abs(b.x - c.x) < c.L * FR.M / 2);
+        if (c) { if (!c.burn) G.msg('Vagon gori! Pogasi ga!', '#f3c2b2', 1.6); c.burn = Math.max(c.burn, 1); Snd.bad(); Ctl.rumble(0, 0.5, 0.5, 200); Ctl.rumble(1, 0.5, 0.5, 200); }
+      }
+    }
+    // voda
+    const hitCar = (x, y) => e.cars.find(c => c.burn > 0 && Math.abs(x - c.x) < c.L * FR.M / 2 && y > e.roofY - 70 && y < FR.gy);
+    for (const w of e.drops) {
+      w.vy += 700 * dt; w.x += w.vx * dt; w.y += w.vy * dt; w.life -= dt;
+      for (const b of e.balls) if (!b.dead && Math.hypot(w.x - b.x, w.y - b.y) < b.r + 10) {
+        b.dead = true; w.life = 0; e.doused++; G.addPoints(3); Snd.splash();
+        for (let k = 0; k < 5; k++) e.steam.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 80, vy: -60 - Math.random() * 60, life: 0.9 });
+      }
+      if (w.life > 0 && (d.mode === 'pass' || d.mode === 'final') && Math.hypot((w.x - d.x) / 1.4, w.y - (d.y - 20)) < 48) {
+        w.life = 0; d.wet++;
+        if (d.wet >= 14) { d.wet = 0; d.sneeze = true; e.sneezes++; G.addPoints(5); say(d, 'Pššš! Moker sem!', 1.4); e.fx.push({ x: d.x, y: d.y - 60, t: 0, text: 'PŠŠŠ!' }); }
+      }
+      const c = w.life > 0 && hitCar(w.x, w.y);
+      if (c) {
+        w.life = 0; c.burn -= 0.04;
+        if (c.burn <= 0) { c.burn = 0; G.addPoints(2); G.msg('Pogašeno! +2', '#d9ecc4', 1.4); for (let k = 0; k < 6; k++) e.steam.push({ x: c.x + (Math.random() - 0.5) * 80, y: e.roofY - 20, vx: (Math.random() - 0.5) * 60, vy: -80, life: 1 }); }
+      }
+      if (w.y > FR.gy + 30) w.life = 0;
+    }
+    e.drops = e.drops.filter(w => w.life > 0);
+    e.balls = e.balls.filter(b => !b.dead && b.y < H && b.x > -100 && b.x < W + 100);
+    for (const s of e.steam) { s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; }
+    e.steam = e.steam.filter(s => s.life > 0);
+    // goreči vagoni se razplamtijo in stanejo točke
+    for (const c of e.cars) if (c.burn > 0) {
+      c.burn = Math.min(3, c.burn + dt * 0.18);
+      e.burnPts += dt * c.burn * 0.5;
+    }
+    while (e.burnPts >= 1) { e.burnPts -= 1; G.addPoints(-1); }
+    for (const f of e.fx) f.t += dt;
+    e.fx = e.fx.filter(f => f.t < 1);
+  }
+  function drawFireScene(g, G) {
+    const e = G.ev, d = e.d, { gy, M } = FR;
+    backdrop(g, e.scroll, gy, { top: '#b9d3e0', bottom: '#f1e6c8', far: '#9fa9a8', hill: '#7f9a5c' });
+    g.fillStyle = '#93a65e'; g.fillRect(0, gy, W, H - gy);
+    // Soča pod progo
+    g.fillStyle = '#5ec2bd'; g.fillRect(0, gy + 52, W, 70);
+    inkLine(g, [0, gy + 52, W, gy + 52], 3, INK, 0.3);
+    for (let k = 0; k < 9; k++) { const x = ((k * 160 - e.scroll * 0.9) % (W + 160) + W + 160) % (W + 160) - 80; inkLine(g, [x, gy + 80, x + 20, gy + 75, x + 40, gy + 80], 2.5, '#a6e2da', 0.4, k); }
+    sideRails(g, e.scroll, gy);
+    // vhod v predor (temen lok) – za vlakom
+    const tn = e.tunnel;
+    if (tn) inkPoly(g, [tn.x, gy, tn.x, gy - 120, tn.x + 30, gy - 160, tn.x + 140, gy - 160, tn.x + 170, gy - 120, tn.x + 170, gy], '#15100c', 3, 0.5, 900);
+    // vlak in plameni
+    e.cars.forEach((c, k) => carSide(g, c.type, c.x, gy + Math.sin(e.t * 18 + k) * 1.2, M, 0, { spin: e.scroll / 20, heads: true, seed: k }));
+    puff(g, e.cars[0].x + 3 * M, gy - 200, G.time * 2);
+    for (const c of e.cars) if (c.burn > 0) {
+      const n = 3 + Math.floor(c.burn * 2), half = c.L * M / 2;
+      for (let k = 0; k < n; k++) {
+        const fx = c.x - half + 10 + (k + 0.5) / n * (half * 2 - 20), fl = Math.sin(G.time * 14 + k * 2);
+        const sz = 10 + c.burn * 7 + fl * 3;
+        inkPoly(g, [fx - sz * 0.6, e.roofY - 8, fx - sz * 0.25, e.roofY - 8 - sz * 1.2, fx, e.roofY - 8 - sz * 2 - fl * 4, fx + sz * 0.3, e.roofY - 8 - sz * 1.1, fx + sz * 0.6, e.roofY - 8], '#f0902a', 2.5, 0.6, 910 + k);
+        inkPoly(g, [fx - sz * 0.3, e.roofY - 8, fx, e.roofY - 8 - sz, fx + sz * 0.3, e.roofY - 8], PAL.yellow, 0, 0.4, 920 + k);
+      }
+      const q = (G.time * 0.6) % 1; blobs(g, [[c.x - q * 60, e.roofY - 70 - q * 90, 14 + q * 20]], '#6a625a', 2.5, 930);
+    }
+    drawRig(g, e);
+    // voda, para, ognjene krogle
+    g.fillStyle = '#7fc6e6';
+    for (const w of e.drops) { g.beginPath(); g.arc(w.x, w.y, 4, 0, 7); g.fill(); }
+    for (const s of e.steam) blobs(g, [[s.x, s.y, 8 + (1 - s.life) * 18]], PAL.white, 2, Math.floor(s.x));
+    for (const b of e.balls) { fireBlob(g, b.x, b.y, b.r + Math.sin(G.time * 20) * 2, 950); inkEllipse(g, b.x, b.y, b.r * 0.45, b.r * 0.45, PAL.yellow, 0, 951); }
+    // zmaj
+    if (d.mode !== 'wait' || d.x > -150 && d.x < W + 150) drawDragonFly(g, d.x, d.y, G.time, d.f, 1.3, { breath: d.spitT > 0, stun: d.mode === 'bonk', angry: d.mode === 'final' });
+    // gora s predorom pokrije vlak, ki je že notri
+    if (tn) {
+      const ax = tn.x + 170;
+      g.save();
+      inkPoly(g, [ax, gy + 20, ax, gy - 120, tn.x + 140, gy - 160, tn.x + 30, gy - 160, tn.x, gy - 120, tn.x - 60, gy - 200, tn.x + 80, gy - 420, tn.x + 300, gy - 560, W + 900, gy - 600, W + 900, gy + 20], '#8a9a62', 4, 1, 960);
+      inkPoly(g, [tn.x - 4, gy, tn.x - 4, gy - 124, tn.x + 30, gy - 168, tn.x + 140, gy - 168, tn.x + 176, gy - 124, tn.x + 176, gy, tn.x + 166, gy, tn.x + 166, gy - 118, tn.x + 138, gy - 152, tn.x + 32, gy - 152, tn.x + 8, gy - 118, tn.x + 8, gy], '#b5a994', 3, 0.5, 961);
+      inkPoly(g, [tn.x + 160, gy - 420, tn.x + 300, gy - 560, tn.x + 420, gy - 430], PAL.snow, 3, 0.6, 962);
+      g.restore();
+    }
+    for (const f of e.fx) burstText(g, f.x, f.y - 40, f.text, 0.6 + f.t * 0.3, PAL.yellow, 970);
+    if (d.sayT > 0 && d.x > -100 && d.x < W + 100) World.bubble(g, d.x + d.f * 60, d.y - 130, d.say, 18);
+    // HUD
+    card(g, W / 2 - 380, 12, 760, 104, PAL.cream, 980, 14);
+    toonText(g, tn ? 'NAPREJ V PREDOR!' : 'ZMAJ NAPADA – GASITA!', W / 2, 40, 28, PAL.red, 'center', FONT_T, 5);
+    plainText(g, `prelet ${Math.min(e.pass + (d.mode === 'pass' ? 1 : 0), FR.passes)}/${FR.passes}`, W / 2 - 350, 40, 15, INK, 'left');
+    plainText(g, `pogašene krogle: ${e.doused}`, W / 2 + 350, 40, 15, INK, 'right');
+    // tlak vode
+    plainText(g, 'TLAK VODE', W / 2 - 350, 72, 13, INK, 'left');
+    inkPoly(g, [W / 2 - 270, 64, W / 2 - 120, 64, W / 2 - 120, 80, W / 2 - 270, 80], PAL.white, 2.5, 0.3, 981);
+    g.fillStyle = e.press > 0.3 ? '#7fc6e6' : '#e58a74'; g.fillRect(W / 2 - 268, 66, 146 * e.press, 12);
+    let lx = legend(g, W / 2 - 100, 72, ['L↕'], 'P1: gor-dol = črpaj', 13);
+    lx = legend(g, lx + 14, 72, ['L↔', 'L↕'], 'P2: meri', 13); legend(g, lx + 10, 72, ['A'], 'brizgaj', 13);
+    const burning = e.cars.filter(c => c.burn > 0).length;
+    plainText(g, burning ? `Gori ${burning} ${burning === 1 ? 'vagon' : 'vagona'} – usmeri vodo na plamene!` : e.press < 0.2 ? 'Ni tlaka – P1 naj hitro črpa!' : 'Zadenita ognjene krogle, preden padejo na vlak!', W / 2, 100, 15, burning || e.press < 0.2 ? PAL.red2 : '#2d6a2d', 'center');
+  }
+
+  // ---------- 5) goreča hiša ----------
+  // vlak stoji ob hiši; ista črpalka in brizgalna kot pri zmaju, plameni se širijo, dokler jih ne pogasita
+  const BZ = { gy: 600, M: 13.5, front: 700, hx0: 790, hx1: 1170, top: 250 };
+  function startBlaze(G) {
+    const cars = trainCars(G.train), { M, front } = BZ;
+    const xs = cars.map(c => ({ ...c, x: front - c.off * M, burn: 0 }));
+    const wag = xs.filter(c => c.type === 'P' || c.type === 'F');
+    const roofY = BZ.gy - 96 * M / SIDE_U;
+    const spots = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) spots.push({ x: BZ.hx0 + 70 + c * 120, y: BZ.gy - 60 - r * 110, burn: 0, win: true, who: (r * 3 + c) % 4 });
+    spots.push({ x: 900, y: BZ.top - 40, burn: 0 }, { x: 1060, y: BZ.top - 40, burn: 0 }, { x: 980, y: BZ.top - 110, burn: 0 });
+    for (const k of [1, 3, 5, 7, 9, 10]) spots[k].burn = 1.2 + Math.random() * 1.5;
+    G.ev = { kind: 'blaze', t: 0, scroll: 0, cars: xs, roofY, spots,
+      pumpX: wag[Math.min(1, wag.length - 1)].x - 10, hoseX: wag[0].x + 60,
+      press: 0.5, pumpDir: 0, handle: 0, aim: 0.45, spraying: false, drops: [], steam: [], fx: [], done: 0, time: 0 };
+  }
+  function updateBlaze(G, dt) {
+    const e = G.ev;
+    e.t += dt;
+    pumpAndHose(G, e, dt);
+    if (!e.done) e.time = e.t;
+    for (const w of e.drops) {
+      w.vy += 700 * dt; w.x += w.vx * dt; w.y += w.vy * dt; w.life -= dt;
+      for (const f of e.spots) if (f.burn > 0 && Math.hypot(w.x - f.x, w.y - (f.y - 14)) < 42) {
+        w.life = 0; f.burn -= 0.022;
+        if (f.burn <= 0) {
+          f.burn = 0; G.addPoints(2); Snd.splash();
+          for (let k = 0; k < 6; k++) e.steam.push({ x: f.x + (Math.random() - 0.5) * 40, y: f.y - 20, vx: (Math.random() - 0.5) * 60, vy: -90, life: 1 });
+        }
+        break;
+      }
+      if (w.y > BZ.gy + 30) w.life = 0;
+    }
+    e.drops = e.drops.filter(w => w.life > 0);
+    for (const s of e.steam) { s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; }
+    e.steam = e.steam.filter(s => s.life > 0);
+    // plameni rastejo in preskočijo na sosednja okna
+    for (const f of e.spots) if (f.burn > 0) {
+      f.burn = Math.min(3, f.burn + dt * 0.1);
+      if (f.burn > 2.4 && Math.random() < dt * 0.12) {
+        const n = e.spots.filter(o => o !== f && !o.burn && Math.hypot(o.x - f.x, o.y - f.y) < 170);
+        if (n.length) n[Math.floor(Math.random() * n.length)].burn = 0.6;
+      }
+    }
+    if (!e.done && e.spots.every(f => !f.burn)) {
+      e.done = 0.01;
+      const p = e.time < 40 ? 60 : e.time < 70 ? 40 : 20;
+      G.addPoints(p); G.score.blaze = e.time;
+      G.msg(`Požar pogašen v ${e.time.toFixed(0)} s! +${p}`, '#d9ecc4', 4); Snd.good(); whistleTimer = 0.6;
+    }
+    if (e.done) {
+      e.done += dt;
+      if (e.done > 4 && !G.trans) transition(() => {
+        G.mode = 'drive'; G.ev = null; G.blaze.state = 'done'; World.snap();
+        G.msg('Vaščani mahajo gasilcem s parnega vlaka!', PAL.yellow, 4); whistleTimer = 1;
+      });
+    }
+    for (const f of e.fx) f.t += dt;
+    e.fx = e.fx.filter(f => f.t < 1);
+  }
+  function drawBlaze(g, G) {
+    const e = G.ev, { gy, M, hx0, hx1, top } = BZ;
+    backdrop(g, 0, gy, { top: '#e9c49a', bottom: '#f4e7c5', far: '#b0a890', hill: '#a4a060', trees: false });
+    g.fillStyle = '#b9ae6a'; g.fillRect(0, gy, W, H - gy);
+    // vinogradi v ozadju
+    for (let k = 0; k < 14; k++) { const x = 20 + k * 92; inkLine(g, [x, gy - 4, x, gy - 40], 3, PAL.woodDark, 0.3, k); blobs(g, [[x, gy - 44, 14], [x + 14, gy - 38, 10]], PAL.leaf, 2, 990 + k); }
+    sideRails(g, 0, gy);
+    // hiša
+    const smoke = e.spots.reduce((a, f) => a + f.burn, 0);
+    for (let k = 0; k < Math.min(6, Math.ceil(smoke)); k++) { const q = (G.time * 0.3 + k / 6) % 1; blobs(g, [[980 + Math.sin(k * 3) * 120 - q * 80, top - 120 - q * 200, 26 + q * 40]], '#5a524a', 3, 1000 + k); }
+    inkPoly(g, [hx0, gy, hx1, gy, hx1, top, hx0, top], '#e8d6b0', 4, 0.8, 1010);
+    inkPoly(g, [hx0 - 24, top + 4, (hx0 + hx1) / 2, top - 150, hx1 + 24, top + 4], PAL.roof, 4, 0.8, 1011);
+    inkPoly(g, [1090, top - 70, 1120, top - 70, 1120, top - 130, 1090, top - 130], '#8a5a43', 3, 0.5, 1012);
+    inkPoly(g, [945, gy, 1015, gy, 1015, gy - 110, 945, gy - 110], PAL.woodDark, 3, 0.5, 1013);
+    plainText(g, 'GOSTILNA', (hx0 + hx1) / 2, top + 30, 20, PAL.red2, 'center', FONT_T);
+    for (const f of e.spots) if (f.win) {
+      const sooty = f.burn > 0;
+      inkPoly(g, [f.x - 34, f.y, f.x + 34, f.y, f.x + 34, f.y - 70, f.x - 34, f.y - 70], sooty ? '#3a2a20' : '#f6e8bf', 3, 0.4, 1020 + f.x);
+      inkLine(g, [f.x, f.y, f.x, f.y - 70], 2.5, INK, 0.3); inkLine(g, [f.x - 34, f.y - 35, f.x + 34, f.y - 35], 2.5, INK, 0.3);
+      if (f.who === 0 && !(f.y > gy - 100 && f.x > 940 && f.x < 1020)) {
+        // vaščan v oknu
+        const hy = f.y - 30 - (e.done ? Math.abs(Math.sin(G.time * 8)) * 6 : 0);
+        inkEllipse(g, f.x + 10, hy, 12, 12, PAL.skin, 2.5, 1030 + f.x);
+        pieEye(g, f.x + 6, hy - 2, 3, 0, 0, false, 1031); pieEye(g, f.x + 14, hy - 2, 3, 0, 0, false, 1032);
+        inkEllipse(g, f.x + 10, hy + 6, 3, sooty ? 4 : 2, '#6a2a22', 1.5, 1033);
+        inkEllipse(g, f.x + 26, hy - 10 + Math.sin(G.time * 12) * 4, 5, 5, PAL.white, 2, 1034);
+      }
+    }
+    // plameni
+    for (const f of e.spots) if (f.burn > 0) {
+      const sz = 14 + f.burn * 10;
+      for (let k = -1; k <= 1; k++) {
+        const fl = Math.sin(G.time * 13 + k * 2 + f.x);
+        const x = f.x + k * sz * 0.6, b = f.y - 4, h = sz * (k ? 1.4 : 2) + fl * 5;
+        inkPoly(g, [x - sz * 0.5, b, x - sz * 0.2, b - h * 0.6, x, b - h, x + sz * 0.25, b - h * 0.55, x + sz * 0.5, b], '#f0902a', 2.5, 0.6, 1040 + k);
+        inkPoly(g, [x - sz * 0.25, b, x, b - h * 0.5, x + sz * 0.25, b], PAL.yellow, 0, 0.4, 1043 + k);
+      }
+    }
+    // vlak (zadnji vagoni so izven slike)
+    e.cars.forEach((c, k) => { if (c.x > -120) carSide(g, c.type, c.x, gy, M, 0, { heads: true, seed: k }); });
+    puff(g, e.cars[0].x + 3 * M, gy - 200, G.time);
+    drawRig(g, e);
+    g.fillStyle = '#7fc6e6';
+    for (const w of e.drops) { g.beginPath(); g.arc(w.x, w.y, 4, 0, 7); g.fill(); }
+    for (const s of e.steam) blobs(g, [[s.x, s.y, 8 + (1 - s.life) * 18]], PAL.white, 2, Math.floor(s.x));
+    if (!e.done && e.t < 3) World.bubble(g, 1000, top - 190, 'Na pomoč! Gori!', 20);
+    if (e.done) { World.bubble(g, 1000, top - 190, 'Hvala, gasilci!', 22); burstText(g, W / 2, 200, 'POGAŠENO!', 1.2); }
+    // HUD
+    card(g, W / 2 - 380, 12, 760, 104, PAL.cream, 1050, 14);
+    toonText(g, e.done ? 'POŽAR JE POGAŠEN!' : 'GORI GOSTILNA!', W / 2, 40, 28, PAL.red, 'center', FONT_T, 5);
+    const left = e.spots.filter(f => f.burn > 0).length;
+    plainText(g, `${e.time.toFixed(0)} s`, W / 2 - 350, 40, 16, INK, 'left');
+    plainText(g, `plamenov: ${left}`, W / 2 + 350, 40, 16, left ? PAL.red2 : '#2d6a2d', 'right');
+    plainText(g, 'TLAK VODE', W / 2 - 350, 72, 13, INK, 'left');
+    inkPoly(g, [W / 2 - 270, 64, W / 2 - 120, 64, W / 2 - 120, 80, W / 2 - 270, 80], PAL.white, 2.5, 0.3, 1051);
+    g.fillStyle = e.press > 0.3 ? '#7fc6e6' : '#e58a74'; g.fillRect(W / 2 - 268, 66, 146 * e.press, 12);
+    let lx = legend(g, W / 2 - 100, 72, ['L↕'], 'P1: gor-dol = črpaj', 13);
+    lx = legend(g, lx + 14, 72, ['L↔', 'L↕'], 'P2: meri', 13); legend(g, lx + 10, 72, ['A'], 'brizgaj', 13);
+    plainText(g, e.press < 0.2 ? 'Ni tlaka – P1 naj hitro črpa!' : 'Pogasita vse plamene, preden se razširijo!', W / 2, 100, 15, e.press < 0.2 ? PAL.red2 : '#2d6a2d', 'center');
+  }
+
   // ---------- pogled od zgoraj: hlod in kanjon ----------
   function ground(g, G, sx, sy) {
     const tr = G.track;
@@ -793,6 +1211,20 @@ const Events = (() => {
   }
   function items(G, sx, sy, list) {
     const lg = G.log, tr = G.track;
+    const bz = G.blaze;
+    if (bz && bz.pos && Math.abs(bz.pos - G.train.pos) < 400) {
+      const q = trackPoint(tr, bz.pos, 20), x = sx(q.x), y = sy(q.z), burning = bz.state !== 'done';
+      list.push({ y, x, draw: g => {
+        const img = spr('house1');
+        if (img) g.drawImage(img, x - img.width * 0.7, y - img.height * 1.4 + 8, img.width * 1.4, img.height * 1.4);
+        if (burning) {
+          for (let k = -1; k <= 1; k++) { const fl = Math.sin(G.time * 12 + k * 2), fx = x + k * 26, b = y - 60, h = 40 + fl * 8;
+            inkPoly(g, [fx - 16, b, fx - 6, b - h * 0.6, fx, b - h, fx + 8, b - h * 0.55, fx + 16, b], '#f0902a', 2.5, 0.6, 1060 + k); }
+          const q2 = (G.time * 0.4) % 1; blobs(g, [[x - q2 * 40, y - 120 - q2 * 120, 18 + q2 * 26]], '#5a524a', 3, 1063);
+          if (Math.abs(bz.pos - G.train.pos) < 200) World.bubble(g, x + 40, y - 150, 'Na pomoč!', 16);
+        }
+      } });
+    }
     if (lg && Math.abs(lg.pos - G.train.pos) < 400) {
       const q = trackPoint(tr, lg.pos), x = sx(q.x), y = sy(q.z);
       list.push({ y: y + 4, x, draw: g => {
@@ -819,13 +1251,17 @@ const Events = (() => {
     if (!G.ev) return;
     if (G.ev.kind === 'saw') updateSaw(G, dt);
     else if (G.ev.kind === 'jump') updateJump(G, dt);
-    else updateDragon(G, dt);
+    else if (G.ev.kind === 'chase') updateChase(G, dt);
+    else if (G.ev.kind === 'blaze') updateBlaze(G, dt);
+    else updateFire(G, dt);
   }
   function draw(g, G) {
     if (!G.ev) return;
     if (G.ev.kind === 'saw') drawSaw(g, G);
     else if (G.ev.kind === 'jump') drawJump(g, G);
-    else drawDragonScene(g, G);
+    else if (G.ev.kind === 'chase') drawChaseScene(g, G);
+    else if (G.ev.kind === 'blaze') drawBlaze(g, G);
+    else drawFireScene(g, G);
   }
   return { modes, start, drive, alert, update, draw, drawLab, ground, items };
 })();

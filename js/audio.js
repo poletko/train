@@ -122,6 +122,7 @@ const Snd = (() => {
     },
     boom() { burst('lowpass', 220, 0.7, 1.4, 3.2); burst('lowpass', 900, 0.5, 0.8, 1.2); },
     click() { tone(900, 0.12, 0.06, 'square'); },
+    pump() { burst('lowpass', 260, 1, 0.35, 0.18); burst('bandpass', 900, 2, 0.12, 0.12, 0.05); },
     saw(dir) { burst('bandpass', dir > 0 ? 2400 : 1900, 2.5, 0.22, 0.16); },
     toss() { burst('bandpass', 700, 1.2, 0.25, 0.12); tone(520, 0.06, 0.1, 'triangle'); },
     bonk() { tone(330, 0.25, 0.12, 'square'); tone(180, 0.2, 0.2, 'triangle', 0.04); },

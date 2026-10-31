@@ -24,7 +24,7 @@ const LEGS = [
   { len: 2800, e1: -10, hump: 18, rain: false, tunnels: [],                         seed: 11, line: 80 },
   { len: 3200, e1: -5,  hump: 24, rain: true,  tunnels: [[0.82, 0.94]],             seed: 23, line: 70 },
   { len: 3400, e1: 0,   hump: 16, rain: false, tunnels: [[0.18, 0.34], [0.56, 0.74]], seed: 37, line: 70 },
-  { len: 3200, e1: -50, hump: 0,  rain: false, tunnels: [[0.14, 0.28]],             seed: 41, line: 60 },
+  { len: 3200, e1: -50, hump: 0,  rain: false, tunnels: [[0.14, 0.28], [0.6, 0.72]], seed: 41, line: 60 },
   { len: 2800, e1: -75, hump: 8,  rain: true,  tunnels: [],                         seed: 53, line: 80 },
 ];
 
@@ -62,11 +62,11 @@ const KID_BONUS = 10;               // točke, če zatrobiš otrokom ob progi
 const MINI_QUIZ_EVERY = [90, 140];  // s vožnje med kurjačevimi računi
 const MINI_QUIZ_TIME = 45;          // s za kurjačev račun
 
-// Vmesne igre: hlod čez progo (odsek 0), skakalnica čez kanjon (1), zmaj napade vlak (2)
+// Vmesne igre: hlod (odsek 0), skakalnica (1), razbojnik na samorogu (2), zmaj in brizgalna (3), goreča hiša (4)
 const JUMP_KMH = 55;                // najmanjša hitrost na skakalnici
 const JUMP_GAP = 40;                // m, širina kanjona
 const JUMP_RAMP = 30;               // m, dolžina klančine pred kanjonom
-const EVENT_TIME = [45, 0, 150];    // s rezerve v voznem redu za vmesno igro na odseku
+const EVENT_TIME = [45, 0, 150, 30, 60];  // s rezerve v voznem redu za vmesno igro na odseku
 
 // Zasilne rezerve po rešenem kazenskem računu
 const RESERVE = { coal: 400, water: 3, sand: 60 };

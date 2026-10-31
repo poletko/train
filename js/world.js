@@ -54,9 +54,14 @@ function decorate(track) {
   }
   // zmaj z vitezom in samorog
   { const i = track.freeAt(Math.round(lerp(track.stops[2], track.stops[3], 0.46)), 15) ? Math.round(lerp(track.stops[2], track.stops[3], 0.46)) : Math.round(lerp(track.stops[2], track.stops[3], 0.88));
+    chunks[Math.floor(i / CH)].push({ k: 'rider', ...xz(ptAt(i, -16)), sc: 1, ph: 0 });
+    track.chasePos = i * SEG;
+    blocked.push({ x: ptAt(i, -16)[0], z: ptAt(i, -16)[1], r: 16 }); }
+  // zmaj in vitez pred predorom na četrtem odseku
+  if (track.firePos) { const i = Math.round(track.firePos / SEG) - 6;
     chunks[Math.floor(i / CH)].push({ k: 'dragon', ...xz(ptAt(i, -19)), sc: 1, ph: 0 }, { k: 'knight', ...xz(ptAt(i + 4, -8)), sc: 1, ph: 0 });
-    track.dragonPos = i * SEG;
     blocked.push({ x: ptAt(i, -20)[0], z: ptAt(i, -20)[1], r: 22 }); }
+  if (track.blazePos) { const i = Math.round(track.blazePos / SEG); blocked.push({ x: ptAt(i, 20)[0], z: ptAt(i, 20)[1], r: 18 }); }
   { const i = Math.round(lerp(track.stops[1], track.stops[2], 0.3));
     chunks[Math.floor(i / CH)].push({ k: 'unicorn', ...xz(ptAt(i, 24)), sc: 1, ph: 0 });
     blocked.push({ x: ptAt(i, 24)[0], z: ptAt(i, 24)[1], r: 16 }); }
@@ -443,6 +448,7 @@ const World = (() => {
       } else {
         const o = it.o;
         if (o.k === 'dragon') { if (!G.dragon || G.dragon.state === 'idle') drawDragon(g, it.x, it.y, G.time + o.ph, 1); continue; }
+        if (o.k === 'rider') { if (!G.chase || G.chase.state === 'idle') drawRider(g, it.x, it.y, G.time, 1, 0.7, { idle: true }); continue; }
         if (o.k === 'knight') { drawKnight(g, it.x, it.y, G.time + o.ph, -1); continue; }
         if (o.k === 'unicorn') { drawUnicorn(g, it.x, it.y, G.time + o.ph); continue; }
         const img = o.k.startsWith('sign') ? signSprite(+o.k.slice(4)) : spr(o.k);

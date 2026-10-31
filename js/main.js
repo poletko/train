@@ -32,9 +32,9 @@ function newGame() {
   }
   G = {
     mode: 'title', track, train, sched, clock: START_TIME, leg: 0, st: null,
-    log: { pos: track.logPos, state: 'idle' }, jump: { pos: track.jumpPos, state: 'idle', tries: 0 }, dragon: { pos: track.dragonPos, state: 'idle' }, ev: null,
+    log: { pos: track.logPos, state: 'idle' }, jump: { pos: track.jumpPos, state: 'idle', tries: 0 }, chase: { pos: track.chasePos, state: 'idle' }, dragon: { pos: track.firePos, tunnel: track.fireTunnel, state: 'idle' }, blaze: { pos: track.blazePos, state: 'idle' }, ev: null,
     challenges: makeChallenges(track), kids: makeKids(track), depot: null, depotCool: 0, quiz: null, mini: null, miniT: 60, crash: null, pic: null,
-    score: { points: 0, delivered: 0, missed: 0, left: 0, violations: 0, penalties: 0, late: 0, onTime: 0, sheep: 0, kids: 0, mini: 0, saw: 0, jump: '', dragon: false },
+    score: { points: 0, delivered: 0, missed: 0, left: 0, violations: 0, penalties: 0, late: 0, onTime: 0, sheep: 0, kids: 0, mini: 0, saw: 0, jump: '', chase: false, fire: 0, blaze: 0 },
     msgs: [], violated: new Set(), ready: [false, false], reason: '', time: 0, paused: false, trans: null,
     msg(text, color = PAL.cream, dur = 3) { this.msgs.unshift({ text, color, t: dur, dur }); if (this.msgs.length > 3) this.msgs.pop(); },
     addPoints(p) { this.score.points += p; },
@@ -288,7 +288,7 @@ function drawStats(g, y) {
     `Dostavljeno: ${s.delivered}   ·   pozabljeno: ${s.missed + s.left}`,
     `Točni prihodi: ${s.onTime}   ·   zamuda skupaj: ${fmtDelta(s.late).slice(1)}`,
     `Prehitro: ${s.violations}×   ·   ovce: ${s.sheep}   ·   veseli otroci: ${s.kids}   ·   kazni: ${s.penalties}`,
-    `Hlod: ${s.saw ? s.saw.toFixed(1) + ' s' : '–'}   ·   skok: ${s.jump || (G.jump.tries ? 'v kanjonu' : '–')}${G.jump.tries ? ` (padci: ${G.jump.tries})` : ''}   ·   zmaj: ${s.dragon ? 'premagan' : '–'}`,
+    `Hlod: ${s.saw ? s.saw.toFixed(1) + ' s' : '–'}   ·   skok: ${s.jump || (G.jump.tries ? 'v kanjonu' : '–')}${G.jump.tries ? ` (padci: ${G.jump.tries})` : ''}   ·   razbojnik: ${s.chase ? 'ujet' : '–'}   ·   krogle: ${s.fire}   ·   požar: ${s.blaze ? s.blaze.toFixed(0) + ' s' : '–'}`,
   ];
   lines.forEach((l, i) => plainText(g, l, W / 2, y + i * 32, 21, INK, 'center'));
 }
@@ -310,7 +310,7 @@ function drawEnd(g) {
   plainText(g, 'Prispeli ste v Novo Gorico! To je vse, prijatelji!', W / 2, 220, 24, INK, 'center');
   drawStats(g, 280);
   const p = G.score.points;
-  const rank = p >= 1000 ? 'mojstri parne vleke' : p >= 650 ? 'izkušena posadka' : p >= 300 ? 'solidna posadka' : 'vajenci';
+  const rank = p >= 1300 ? 'mojstri parne vleke' : p >= 900 ? 'izkušena posadka' : p >= 450 ? 'solidna posadka' : 'vajenci';
   inkPoly(g, HUD.star(W / 2, 440, 54, 24), PAL.yellow, 4, 0.8, 5);
   toonText(g, String(p), W / 2, 442, 26, PAL.white);
   toonText(g, 'Naziv: ' + rank, W / 2, 520, 30, PAL.mustard, 'center', FONT_T);
@@ -436,17 +436,19 @@ function start() {
       G.leg = Math.max(0, G.track.stops.findIndex(s => s * SEG > t.pos) - 1);
     } else { G.mode = 'station'; Station.enter(G, 0); }
   }
-  // vmesne igre: #ev-saw, #ev-jump (#ev-jump-slow), #ev-dragon (#ev-dragon-lab)
-  const ev = location.hash.match(/[#-]ev-(saw|jump|dragon)/);
+  // vmesne igre: #ev-saw, #ev-jump (#ev-jump-slow), #ev-chase (#ev-chase-lab), #ev-fire, #ev-blaze
+  const ev = location.hash.match(/[#-]ev-(saw|jump|chase|fire|blaze)/);
   if (ev) {
     const t = G.train; t.coal = 3000; t.water = 15; t.sand = 200;
     t.wagons[0].slots[0] = { kind: 'P', dest: 2 }; t.wagons[3].slots[0] = { kind: 'F', dest: 3 };
     const k = ev[1];
-    G.leg = k === 'saw' ? 0 : k === 'jump' ? 1 : 2;
+    G.leg = ['saw', 'jump', 'chase', 'fire', 'blaze'].indexOf(k);
     G.clock = G.sched.dep[G.leg] + 60;
     if (k === 'saw') { t.pos = G.log.pos - 30; G.log.state = 'saw'; }
     if (k === 'jump') { t.pos = G.jump.pos - JUMP_RAMP; t.v = (location.hash.includes('slow') ? JUMP_KMH - 15 : JUMP_KMH + 8) / 3.6; G.jump.state = 'fly'; G.jump.v = t.v; }
-    if (k === 'dragon') { t.pos = G.dragon.pos; t.v = 12; G.dragon.state = 'fight'; }
+    if (k === 'chase') { t.pos = G.chase.pos; t.v = 12; G.chase.state = 'fight'; }
+    if (k === 'fire') { t.pos = G.dragon.pos; t.v = 12; G.dragon.state = 'fight'; }
+    if (k === 'blaze') { t.pos = G.blaze.pos; t.v = 0; G.blaze.state = 'fight'; }
     Events.start(G, k);
     if (location.hash.includes('lab')) { G.ev.coalHits = 3; }
   }

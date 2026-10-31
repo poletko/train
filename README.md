@@ -15,7 +15,9 @@ Risanka-igra v slogu 1930-ih (gumijasti liki, kipeče črnilne obrobe, filmsko z
 ## Vmesne igre
 - **Jesenice → Bled: hlod čez progo.** Ustavi pred drevesom (sicer −15). Igralca žagata z dvoročno žago: oba držita palico LEVO, nato oba DESNO. Če nista usklajena, žaga obtiči. Hitreje ko prežagata, več točk (do +40).
 - **Bled → Bohinjska Bistrica: skakalnica čez kanjon.** Na klančino pripelji z vsaj 55 km/h in vlak preleti kanjon (+50). Če je prepočasen, pade v kanjon; po 3 rešenih računih ga žerjav potegne nazaj za nov zalet.
-- **Bohinjska Bistrica → Podbrdo: zmaj napade vlak.** Pogled od strani, igralca sta na strehi vagonov (palica = hoja). Najprej mečeta premog (A), ki zmaja samo žgečka. V laboratoriju (Y pri loputi vijoličnega vagona) rešita 3 račune in dobita katapult; ta zmaja zadene, a ga ne ustavi. Drugič v laboratoriju dobita balisto z mrežo: 3 zadetki in zmaj odleti (+50). Pri orožju: A naloži/izstreli, palica gor/dol meri. Zmajev ogenj igralca za hip omami (−2).
+- **Bohinjska Bistrica → Podbrdo: razbojnik na samorogu.** Pogled od strani, igralca sta na strehi vagonov (palica = hoja). Razbojnik s perjanico na klobuku galopira ob vlaku in meče laso (ujet igralec za hip obstane, −2). Premog (A) ga samo žgečka. V laboratoriju (Y pri loputi vijoličnega vagona) rešita 3 račune in dobita katapult, ki ga zadene, a ne ustavi. Drugič v laboratoriju dobita balisto z mrežo: 3 zadetki in razbojnik je ujet (+50). Pri orožju: A naloži/izstreli, palica gor/dol meri.
+- **Podbrdo → Most na Soči: zmaj napade vlak.** Strojevodja črpa vodo s palico gor-dol, kurjač s palico meri brizgalno in brizga z A (ali RT). Zmaj v 6 preletih pljuva ognjene krogle; zadeta krogla ugasne (+3), krogla, ki pade na vagon, ga zažge (goreč vagon stane točke, dokler ga ne pogasita). Zmoči zmaja in kihne namesto da bi pljunil. Na koncu vlak zapelje v predor, zmaj pa se zaleti v goro.
+- **Most na Soči → Nova Gorica: goreča gostilna.** Ustavi ob goreči hiši (če pelješ mimo, −20). Z isto črpalko in brizgalno pogasita vse plamene, preden se razširijo. Hitreje ko pogasita, več točk (do +60).
 
 ## Izzivi na poti
 - **Otroci ob progi:** zatrobi jim (B) in dobiš dodatne točke.
@@ -30,5 +32,5 @@ Risanka-igra v slogu 1930-ih (gumijasti liki, kipeče črnilne obrobe, filmsko z
 - `tools/calibrate.js` – avtopilot v nodu, izpiše porabo po odsekih (za umerjanje formul v priročniku kurjača).
 - `index.html#auto-x600` – avtopilot v brskalniku preigra celo igro; `#auto-short-x600` preizkusi premalo zalog.
 - `index.html#drive@11900` – skok na vožnjo na izbrani razdalji (npr. v predor); dodatno `v27` = hitrost v m/s, `c650` = premog v kg, `sheep` = ovce tik pred vlakom, `quiz` = račun v skladišču. Npr. `#drive@2600v27` podre most. `#station` – prva postaja.
-- `#ev-saw`, `#ev-jump` (`#ev-jump-slow` za padec), `#ev-dragon` – takoj v vmesno igro. Za posnetke: `#auto-nopad-stop0.01-ev-jump-ff4` (`ff<s>` previje igro za s sekund, `stop<s>` jo tam ustavi).
+- `#ev-saw`, `#ev-jump` (`#ev-jump-slow` za padec), `#ev-chase`, `#ev-fire`, `#ev-blaze` – takoj v vmesno igro. Za posnetke: `#auto-nopad-stop0.01-ev-jump-ff4` (`ff<s>` previje igro za s sekund, `stop<s>` jo tam ustavi).
 - `#auto-real-x30` – avtopilot igra tudi postaje s pravimi kontrolami; `#auto-real-lazy-x10` odpelje brez zalog (kazenski računi, skladišče).

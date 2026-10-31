@@ -87,6 +87,12 @@ function buildTrack() {
   // hlod čez progo na prvem odseku
   let logI = 0;
   place(0, [0.2, 0.17, 0.24, 0.8], 30, i => { logI = i; }, 1);
+  // zmaj napade pred zadnjim predorom četrtega odseka, igra se konča ob vhodu v predor
+  let fireT = 0;
+  for (let i = stops[3]; i < stops[4]; i++) if (segs[i].tunnel && !segs[i - 1].tunnel) fireT = i;
+  // goreča hiša na zadnjem odseku
+  let blazeI = 0;
+  place(4, [0.5, 0.45, 0.58, 0.38], 30, i => { blazeI = i; }, 1);
 
   // uvoz v postaje: 40 km/h
   for (const st of stops) {
@@ -137,7 +143,7 @@ function buildTrack() {
   }
 
   const track = { segs, stops, legs: legInfo, signs, bridges, crossings, freeAt, len: segs.length * SEG,
-    logPos: logI * SEG, jumpPos: jumpI * SEG };
+    logPos: logI * SEG, jumpPos: jumpI * SEG, fireTunnel: fireT * SEG, firePos: fireT * SEG - 300, blazePos: blazeI * SEG };
   if (typeof decorate === 'function') decorate(track);
   return track;
 }
