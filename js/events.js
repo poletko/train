@@ -227,8 +227,11 @@ const Events = (() => {
     }
     if (G.blaze && G.blaze.state === 'idle' && G.blaze.pos) {
       const d = G.blaze.pos - t.pos;
-      if (Math.abs(t.v) < 0.05 && Math.abs(d) < 70) { G.blaze.state = 'fight'; transition(() => start(G, 'blaze')); return true; }
-      if (d < -90) { G.blaze.state = 'missed'; G.addPoints(-20); G.msg('Peljali ste mimo goreče hiše! −20', '#f3c2b2', 4); Snd.bad(); }
+      if (Math.abs(t.v) < 0.05 && Math.abs(d) < 70) {
+        if (G.blaze.passed) { G.blaze.passed = false; G.addPoints(20); G.msg('Vrnila sta se – kazen preklicana! +20', '#d9ecc4', 3); }
+        G.blaze.state = 'fight'; transition(() => start(G, 'blaze')); return true;
+      }
+      if (d < -90 && !G.blaze.passed) { G.blaze.passed = true; G.addPoints(-20); G.msg('Peljali ste mimo goreče hiše! −20 – vrnite se nazaj!', '#f3c2b2', 4); Snd.bad(); }
     }
     return false;
   }
@@ -244,6 +247,7 @@ const Events = (() => {
     }
     if (G.blaze && G.blaze.state === 'idle' && G.blaze.pos) {
       const d = G.blaze.pos - t.pos;
+      if (d <= -90 && G.blaze.passed && d > -2000) return { text: `Hiša gori ${Math.round(-d)} m za vami – vrnite se in pogasita!`, col: '#f3c2b2' };
       if (d > -90 && d < 700) return { text: Math.abs(d) < 70 ? 'USTAVI! Gostilna gori – pomagajta gasiti!' : `Ob progi gori hiša čez ${Math.round(d)} m – ustavi pri njej!`, col: '#f3c2b2' };
     }
     return null;
